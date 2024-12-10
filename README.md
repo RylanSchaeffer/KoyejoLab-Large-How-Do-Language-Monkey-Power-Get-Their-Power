@@ -1,1 +1,1 @@
-# KoyejoLab-Origins-of-Scaling-Laws
+# Koyejo Lab Origins of Scaling Laws
