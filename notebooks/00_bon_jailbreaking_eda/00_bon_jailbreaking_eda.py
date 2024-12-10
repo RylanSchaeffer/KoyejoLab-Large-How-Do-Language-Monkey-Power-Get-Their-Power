@@ -122,16 +122,43 @@ src.plot.save_plot_with_multiple_extensions(
 # plt.show()
 
 
-# plt.close()
-# sns.displot(
-#     data=bon_jailbreaking_pass_at_k_df,
-#     kind="hist",
-#     x="Score",
-#     hue="Model",
-#     legend=False,
-#     col="Scaling Parameter",
-#     col_wrap=5,
-# )
-# # plt.show()
+plt.close()
+# Create better bins that handle zero and near-zero values
+smallest_nonzero_pass_at_1 = bon_jailbreaking_pass_at_k_df[
+    bon_jailbreaking_pass_at_k_df["Score"] > 0.0
+]["Score"].min()
+# Round smallest_nonzero_value to the nearest power of 10.
+smallest_nonzero_pass_at_1 = 10.0 ** np.floor(np.log10(smallest_nonzero_pass_at_1))
+log10_smallest_nonzero_pass_at_1 = np.log10(smallest_nonzero_pass_at_1)
+log_bins = np.logspace(
+    log10_smallest_nonzero_pass_at_1, 0, -int(log10_smallest_nonzero_pass_at_1) * 3 + 1
+)
+small_value_for_plotting = smallest_nonzero_pass_at_1 / 2.0
+all_bins = np.concatenate(
+    [[-small_value_for_plotting], [small_value_for_plotting], log_bins]
+)
+g = sns.displot(
+    data=bon_jailbreaking_pass_at_k_df[
+        bon_jailbreaking_pass_at_k_df["Scaling Parameter"] == 1
+    ],
+    kind="hist",
+    x="Score",
+    hue="Model",
+    bins=all_bins,
+    col="Model",
+    col_wrap=4,
+)
+g.set(
+    xscale="log",
+    ylabel="Count",
+    xlabel=r"Attack Success Rate at $N=1$",
+)
+# Move legend to the empty subplot position
+g._legend.set_bbox_to_anchor((0.95, 0.27))
+src.plot.save_plot_with_multiple_extensions(
+    plot_dir=results_dir,
+    plot_filename="y=counts_x=score_hue=model_col=model_bins=custom",
+)
+plt.show()
 
 print("Finished notebooks/00_bon_jailbreaking_eda/00_bon_jailbreaking_eda.py!")

@@ -98,9 +98,12 @@ def create_or_load_bon_jailbreaking_pass_at_k_df(
             )
             models_gsm8k_pass_at_k_dfs_list.append(models_math_scores_df_copy)
         bon_jailbreaking_pass_at_k_df = pd.concat(models_gsm8k_pass_at_k_dfs_list)
-        bon_jailbreaking_pass_at_k_df["Neg Log Score"] = -np.log(
+        bon_jailbreaking_pass_at_k_df["Log Score"] = np.log(
             bon_jailbreaking_pass_at_k_df["Score"]
         )
+        bon_jailbreaking_pass_at_k_df["Neg Log Score"] = -bon_jailbreaking_pass_at_k_df[
+            "Log Score"
+        ]
         bon_jailbreaking_pass_at_k_df.to_parquet(
             bon_jailbreaking_pass_at_k_df_path,
             index=False,
