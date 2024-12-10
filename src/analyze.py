@@ -7,6 +7,8 @@ import pandas as pd
 import pyarrow
 from typing import List, Optional, Union
 
+import src.globals
+
 
 def create_or_load_bon_jailbreaking_pass_at_k_df(
     raw_data_dir=f"{os.getcwd()}/data/raw_data",
@@ -30,36 +32,44 @@ def create_or_load_bon_jailbreaking_pass_at_k_df(
             "gemini-1.5-pro-001_text_t1.0_n10000.jsonl",
             "gpt-4o-mini_text_t1.0_n10000.jsonl",
             "gpt-4o_text_t1.0_n10000.jsonl",
+            "meta-llama-Meta-Llama-3-8B-Instruct_text_t1.0_n10000.jsonl",
         ]
-        # for jsonl_filename in os.listdir(bon_jailbreaking_dir):
         for jsonl_filename in jsonl_filenames:
+            # for jsonl_filename in os.listdir(bon_jailbreaking_dir):
+            if "text" not in jsonl_filename:
+                continue
             model_name, modality, temperature, num_samples = jsonl_filename.split("_")
+            # Strip off the leading "t" and convert to a float.
+            temperature = float(temperature[1:])
             df = pd.read_json(
                 os.path.join(bon_jailbreaking_dir, jsonl_filename), lines=True
             )
             df.rename(
                 columns={
                     "i": "Problem Idx",
-                    "n": "Scaling Parameter",
+                    "n": "Attempt Idx",
                     "flagged": "Score",
                 },
                 inplace=True,
             )
-            df["Model"] = model_name
-            df["Modality"] = modality
+            df["Model"] = src.globals.MODELS_TO_NICE_STRINGS[model_name]
+            df["Modality"] = src.globals.MODALITY_TO_NICE_STRINGS[modality]
             df["Temperature"] = temperature
             best_of_n_jailbreaking_dfs_list.append(df)
 
         best_of_n_jailbreaking_df = pd.concat(best_of_n_jailbreaking_dfs_list)
+        best_of_n_jailbreaking_df = best_of_n_jailbreaking_df[
+            best_of_n_jailbreaking_df["Temperature"] == 1.0
+        ]
 
         bon_jailbreaking_pass_at_k_df = (
             best_of_n_jailbreaking_df.groupby(
-                ["Model", "Modality", "Temperature", "Scaling Parameter", "Problem Idx"]
+                ["Model", "Modality", "Temperature", "Problem Idx"]
             )
             .agg(
                 {
                     "Score": ["size", "sum"],
-                    "Scaling Parameter": ["mean"],
+                    "Attempt Idx": ["mean"],
                 }
             )
             .reset_index()
@@ -107,14 +117,17 @@ def create_or_load_bon_jailbreaking_pass_at_k_df(
         models_gsm8k_pass_at_k_dfs_list = []
         for k in ks_list:
             models_math_scores_df_copy = bon_jailbreaking_pass_at_k_df.copy()
-            models_math_scores_df_copy["k"] = k
-            models_math_scores_df_copy["pass@k"] = estimate_pass_at_k(
+            models_math_scores_df_copy["Scaling Parameter"] = k
+            models_math_scores_df_copy["Score"] = estimate_pass_at_k(
                 num_samples=bon_jailbreaking_pass_at_k_df["Num. Samples"],
                 num_correct=bon_jailbreaking_pass_at_k_df["Num. Samples Correct"],
                 k=k,
             )
             models_gsm8k_pass_at_k_dfs_list.append(models_math_scores_df_copy)
         bon_jailbreaking_pass_at_k_df = pd.concat(models_gsm8k_pass_at_k_dfs_list)
+        bon_jailbreaking_pass_at_k_df["Neg Log Score"] = -np.log(
+            bon_jailbreaking_pass_at_k_df["Score"]
+        )
         bon_jailbreaking_pass_at_k_df.to_parquet(
             bon_jailbreaking_pass_at_k_df_path,
             index=False,
