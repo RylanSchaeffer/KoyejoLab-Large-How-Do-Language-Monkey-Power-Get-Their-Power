@@ -87,35 +87,8 @@ def create_or_load_bon_jailbreaking_pass_at_k_df(
             inplace=True,
         )
 
-        ks_list = [
-            1,
-            2,
-            4,
-            8,
-            10,
-            16,
-            32,
-            64,
-            100,
-            128,
-            256,
-            512,
-            768,
-            1000,
-            1024,
-            1280,
-            1536,
-            2048,
-            3072,
-            4096,
-            6144,
-            7168,
-            8192,
-            10000,
-        ]
-
         models_gsm8k_pass_at_k_dfs_list = []
-        for k in ks_list:
+        for k in src.globals.BON_JAILBREAKING_Ks_LIST:
             models_math_scores_df_copy = bon_jailbreaking_pass_at_k_df.copy()
             models_math_scores_df_copy["Scaling Parameter"] = k
             models_math_scores_df_copy["Score"] = estimate_pass_at_k(
