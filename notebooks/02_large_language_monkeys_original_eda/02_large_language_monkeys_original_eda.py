@@ -122,6 +122,7 @@ g = sns.relplot(
     y="Neg Log Score",
     units="Problem Idx",
     hue="Model",
+    hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
     col="Model",
     col_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
     col_wrap=4,
@@ -170,6 +171,7 @@ g = sns.displot(
     hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
     bins=all_bins,
     col="Model",
+    col_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
     col_wrap=4,
 )
 g.set(
@@ -179,7 +181,7 @@ g.set(
 )
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))
-g.fig.suptitle("Large Language Monkeys")
+g.fig.suptitle("Large Language Monkeys (Original)")
 g.fig.subplots_adjust(top=0.9)
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
