@@ -12,4 +12,4 @@
 
 3. Install the required packages:
 
-`conda install -c conda-forge numpy pandas scipy matplotlib seaborn pyarrow -y`
+`conda install -c conda-forge numpy pandas scipy matplotlib seaborn pyarrow fsspec datasets huggingface_hub -y`
