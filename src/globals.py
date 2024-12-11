@@ -1,19 +1,3 @@
-MODALITY_TO_NICE_STRINGS = {
-    "audio": "Audio",
-    "text": "Text",
-    "vision": "Vision",
-}
-
-MODELS_TO_NICE_STRINGS = {
-    "claude-3-5-sonnet-20240620": "Claude 3.5 Sonnet",
-    "claude-3-opus-20240229": "Claude 3.5 Opus",
-    "gemini-1.5-flash-001": "Gemini 1.5 Flash",
-    "gemini-1.5-pro-001": "Gemini 1.5 Pro",
-    "gpt-4o-mini": "GPT4o Mini",
-    "gpt-4o": "GPT4o",
-    "meta-llama-Meta-Llama-3-8B-Instruct": "Llama 3 8B IT",
-}
-
 # Largely arbitrarily chosen. We want to trade off density and speed.
 BON_JAILBREAKING_Ks_LIST = [
     1,
@@ -118,3 +102,43 @@ BON_JAILBREAKING_Ks_LIST = [
     9500,
     10000,
 ]
+
+BON_JAILBREAKING_MODALITY_TO_NICE_STRINGS = {
+    "audio": "Audio",
+    "text": "Text",
+    "vision": "Vision",
+}
+
+BON_JAILBREAKING_MODELS_TO_NICE_STRINGS = {
+    "claude-3-5-sonnet-20240620": "Claude 3.5 Sonnet",
+    "claude-3-opus-20240229": "Claude 3.5 Opus",
+    "gemini-1.5-flash-001": "Gemini 1.5 Flash",
+    "gemini-1.5-pro-001": "Gemini 1.5 Pro",
+    "gpt-4o-mini": "GPT4o Mini",
+    "gpt-4o": "GPT4o",
+    "meta-llama-Meta-Llama-3-8B-Instruct": "Llama 3 8B IT",
+}
+
+
+LARGE_LANGUAGE_MONKEYS_BENCHMARKS_TO_NICE_STRINGS = {"gsm8k": "GSM8K", "math": "MATH"}
+
+LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER = [
+    "Pythia 70M",
+    "Pythia 160M",
+    "Pythia 410M",
+    "Pythia 1B",
+    "Pythia 2.8B",
+    "Pythia 6.9B",
+    "Pythia 12B",
+]
+
+
+LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_TO_NICE_STRINGS = {
+    "Pythia_70M_300B": "Pythia 70M",
+    "Pythia_160M_300B": "Pythia 160M",
+    "Pythia_410M_300B": "Pythia 410M",
+    "Pythia_1B_300B": "Pythia 1B",
+    "Pythia_2.8B_300B": "Pythia 2.8B",
+    "Pythia_6.9B_300B": "Pythia 6.9B",
+    "Pythia_12B_300B": "Pythia 12B",
+}

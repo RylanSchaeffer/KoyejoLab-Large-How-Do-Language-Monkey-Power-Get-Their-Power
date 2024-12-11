@@ -52,8 +52,12 @@ def create_or_load_bon_jailbreaking_pass_at_k_df(
                 },
                 inplace=True,
             )
-            df["Model"] = src.globals.MODELS_TO_NICE_STRINGS[model_name]
-            df["Modality"] = src.globals.MODALITY_TO_NICE_STRINGS[modality]
+            df["Model"] = src.globals.BON_JAILBREAKING_MODELS_TO_NICE_STRINGS[
+                model_name
+            ]
+            df["Modality"] = src.globals.BON_JAILBREAKING_MODALITY_TO_NICE_STRINGS[
+                modality
+            ]
             df["Temperature"] = temperature
             best_of_n_jailbreaking_dfs_list.append(df)
 
@@ -118,6 +122,98 @@ def create_or_load_bon_jailbreaking_pass_at_k_df(
         models_gsm8k_pass_at_k_df.shape,
     )
     return models_gsm8k_pass_at_k_df
+
+
+def create_or_load_large_language_monkeys_pass_at_k_df(
+    raw_data_dir=f"{os.getcwd()}/data/raw_data",
+    processed_data_dir=f"{os.getcwd()}/data/processed_data",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    large_language_monkeys_pass_at_k_df_path = os.path.join(
+        processed_data_dir, "large_language_monkeys_pass_at_k.parquet"
+    )
+
+    if refresh or not os.path.exists(large_language_monkeys_pass_at_k_df_path):
+        print("Creating large_language_monkeys_pass_at_k_df_path anew...")
+
+        os.makedirs(processed_data_dir, exist_ok=True)
+        large_language_monkeys_dir = os.path.join(
+            raw_data_dir, "large_language_monkeys"
+        )
+        large_language_monkeys_dfs_list = []
+        parquet_filenames = [
+            # "gsm8k_pass_at_k.parquet",
+            "math_pass_at_k.parquet",
+        ]
+        for parquet_filename in parquet_filenames:
+            benchmark = parquet_filename.split("_")[0]
+            df = pd.read_parquet(
+                os.path.join(large_language_monkeys_dir, parquet_filename)
+            )
+            df[
+                "Benchmark"
+            ] = src.globals.LARGE_LANGUAGE_MONKEYS_BENCHMARKS_TO_NICE_STRINGS[benchmark]
+            large_language_monkeys_dfs_list.append(df)
+        large_language_monkeys_pass_at_k_df = pd.concat(
+            large_language_monkeys_dfs_list,
+        )
+
+        # Only keep large & final checkpoints.
+        models_to_keep = [
+            "Pythia_70M_300B",
+            "Pythia_160M_300B",
+            "Pythia_410M_300B",
+            "Pythia_1B_300B",
+            "Pythia_2.8B_300B",
+            "Pythia_6.9B_300B",
+            "Pythia_12B_300B",
+        ]
+        large_language_monkeys_pass_at_k_df = large_language_monkeys_pass_at_k_df[
+            large_language_monkeys_pass_at_k_df["Model Nickname"].isin(models_to_keep)
+        ]
+        large_language_monkeys_pass_at_k_df[
+            "Model Nickname"
+        ] = large_language_monkeys_pass_at_k_df["Model Nickname"].map(
+            src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_TO_NICE_STRINGS
+        )
+
+        large_language_monkeys_pass_at_k_df.drop(
+            columns=["Inference Compute", "neg_log_pass@k"],
+            inplace=True,
+        )
+
+        large_language_monkeys_pass_at_k_df.rename(
+            columns={
+                "pass@k": "Score",
+                "k": "Scaling Parameter",
+                "prompt_idx": "Problem Idx",
+                "Model Nickname": "Model",
+            },
+            inplace=True,
+        )
+
+        large_language_monkeys_pass_at_k_df["Log Score"] = np.log(
+            large_language_monkeys_pass_at_k_df["Score"]
+        )
+        large_language_monkeys_pass_at_k_df[
+            "Neg Log Score"
+        ] = -large_language_monkeys_pass_at_k_df["Log Score"]
+        large_language_monkeys_pass_at_k_df.to_parquet(
+            large_language_monkeys_pass_at_k_df_path,
+            index=False,
+        )
+
+        print(f"Wrote {large_language_monkeys_pass_at_k_df_path} to disk.")
+        del large_language_monkeys_pass_at_k_df
+
+    large_language_monkeys_pass_at_k_df = pd.read_parquet(
+        large_language_monkeys_pass_at_k_df_path
+    )
+    print(
+        "Loaded large_language_monkeys_pass_at_k_df_path with shape: ",
+        large_language_monkeys_pass_at_k_df.shape,
+    )
+    return large_language_monkeys_pass_at_k_df
 
 
 def estimate_pass_at_k(

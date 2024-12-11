@@ -17,8 +17,8 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
 )
 
 bon_jailbreaking_pass_at_k_df = src.analyze.create_or_load_bon_jailbreaking_pass_at_k_df(
-    # refresh=False,
-    refresh=True,
+    refresh=False,
+    # refresh=True,
 )
 
 plt.close()
@@ -66,7 +66,6 @@ src.plot.save_plot_with_multiple_extensions(
     plot_filename="y=neg_log_score_vs_x=scaling_parameter_hue=model",
 )
 # plt.show()
-
 
 plt.close()
 g = sns.relplot(

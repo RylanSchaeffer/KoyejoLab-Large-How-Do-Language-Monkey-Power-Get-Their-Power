@@ -1,0 +1,2 @@
+rsync -avh rschaef@ampere8.stanford.edu:KoyejoLab-Pretraining-Inference-Compute-Exchange-Rate/eval_results/gsm8k/models_gsm8k_scores_2024-10-10.parquet ./data/raw_data/large_language_monkeys/gsm8k_pass_at_k.parquet
+rsync -avh rschaef@skampere1.stanford.edu:KoyejoLab-Pretraining-Inference-Compute-Exchange-Rate/eval_results/math/models_math_scores_2024-10-10.parquet ./data/raw_data/large_language_monkeys/math_pass_at_k.parquet
