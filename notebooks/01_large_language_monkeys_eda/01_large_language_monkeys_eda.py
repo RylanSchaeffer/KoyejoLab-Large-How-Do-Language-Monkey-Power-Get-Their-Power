@@ -18,8 +18,8 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
 )
 
 large_language_monkeys_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_pass_at_k_df(
-    refresh=False,
-    # refresh=True,
+    # refresh=False,
+    refresh=True,
 )
 
 plt.close()
@@ -30,7 +30,7 @@ g = sns.lineplot(
     y="Score",
     hue="Model",
     hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
-    # style="Benchmark",
+    style="Benchmark",
 )
 g.set(
     title="Large Language Monkeys",
@@ -39,7 +39,7 @@ g.set(
     ylabel=r"$\mathbb{E}[\text{Coverage}]$",
     ylim=(0.0, 1.0),
 )
-sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1))
+sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
     plot_filename="y=score_x=scaling_parameter_hue=model",
@@ -54,7 +54,7 @@ g = sns.lineplot(
     y="Neg Log Score",
     hue="Model",
     hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
-    # style="Benchmark",
+    style="Benchmark",
 )
 g.set(
     title="Large Language Monkeys",
@@ -64,7 +64,7 @@ g.set(
     xlabel=r"Scaling Parameter (Num. Attempts $k$)",
     ylabel=r"$-\log (\mathbb{E}[\text{Coverage}])$",
 )
-sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1))
+sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
     plot_filename="y=neg_log_score_vs_x=scaling_parameter_hue=model",
@@ -148,7 +148,8 @@ all_bins = np.concatenate(
 )
 g = sns.displot(
     data=large_language_monkeys_pass_at_k_df[
-        large_language_monkeys_pass_at_k_df["Scaling Parameter"] == 1
+        (large_language_monkeys_pass_at_k_df["Scaling Parameter"] == 1)
+        * (large_language_monkeys_pass_at_k_df["Benchmark"] == "MATH")
     ],
     kind="hist",
     x="Score",
@@ -171,7 +172,7 @@ src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
     plot_filename="y=counts_x=score_hue=model_col=model_bins=custom",
 )
-plt.show()
+# plt.show()
 
 print(
     "Finished notebooks/01_large_language_monkeys_eda/01_large_language_monkeys_eda.py!"

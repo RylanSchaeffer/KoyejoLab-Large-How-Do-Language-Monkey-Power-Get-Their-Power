@@ -73,7 +73,6 @@ def create_or_load_bon_jailbreaking_pass_at_k_df(
             .agg(
                 {
                     "Score": ["size", "sum"],
-                    "Attempt Idx": ["mean"],
                 }
             )
             .reset_index()
@@ -85,7 +84,7 @@ def create_or_load_bon_jailbreaking_pass_at_k_df(
         ]
         bon_jailbreaking_pass_at_k_df.rename(
             columns={
-                "Scoresize": "Num. Samples",
+                "Scoresize": "Num. Samples Total",
                 "Scoresum": "Num. Samples Correct",
             },
             inplace=True,
@@ -96,8 +95,12 @@ def create_or_load_bon_jailbreaking_pass_at_k_df(
             models_math_scores_df_copy = bon_jailbreaking_pass_at_k_df.copy()
             models_math_scores_df_copy["Scaling Parameter"] = k
             models_math_scores_df_copy["Score"] = estimate_pass_at_k(
-                num_samples=bon_jailbreaking_pass_at_k_df["Num. Samples"],
-                num_correct=bon_jailbreaking_pass_at_k_df["Num. Samples Correct"],
+                num_samples_total=bon_jailbreaking_pass_at_k_df[
+                    "Num. Samples Total"
+                ].values,
+                num_samples_correct=bon_jailbreaking_pass_at_k_df[
+                    "Num. Samples Correct"
+                ].values,
                 k=k,
             )
             models_gsm8k_pass_at_k_dfs_list.append(models_math_scores_df_copy)
@@ -142,7 +145,7 @@ def create_or_load_large_language_monkeys_pass_at_k_df(
         )
         large_language_monkeys_dfs_list = []
         parquet_filenames = [
-            # "gsm8k_pass_at_k.parquet",
+            "gsm8k_pass_at_k.parquet",
             "math_pass_at_k.parquet",
         ]
         for parquet_filename in parquet_filenames:
@@ -217,8 +220,8 @@ def create_or_load_large_language_monkeys_pass_at_k_df(
 
 
 def estimate_pass_at_k(
-    num_samples: Union[int, List[int], np.ndarray],
-    num_correct: Union[List[int], np.ndarray],
+    num_samples_total: Union[int, List[int], np.ndarray],
+    num_samples_correct: Union[List[int], np.ndarray],
     k: int,
 ) -> np.ndarray:
     """
@@ -228,18 +231,22 @@ def estimate_pass_at_k(
     def estimator(n: int, c: int, k: int) -> float:
         """
         Calculates 1 - comb(n - c, k) / comb(n, k).
+
+
         """
-        if n - c < k:
+        assert n >= c
+        if (n - c) < k:
             return 1.0
         return 1.0 - np.prod(1.0 - k / np.arange(n - c + 1, n + 1))
 
-    if isinstance(num_samples, int):
-        num_samples_it = itertools.repeat(num_samples, len(num_correct))
+    if isinstance(num_samples_total, int):
+        num_samples_total = np.full_like(
+            num_samples_correct, fill_value=num_samples_total
+        )
     else:
-        assert len(num_samples) == len(num_correct)
-        num_samples_it = iter(num_samples)
+        assert len(num_samples_total) == len(num_samples_correct)
 
     pass_at_k = np.array(
-        [estimator(int(n), int(c), k) for n, c in zip(num_samples_it, num_correct)]
+        [estimator(n, c, k) for n, c in zip(num_samples_total, num_samples_correct)]
     )
     return pass_at_k
