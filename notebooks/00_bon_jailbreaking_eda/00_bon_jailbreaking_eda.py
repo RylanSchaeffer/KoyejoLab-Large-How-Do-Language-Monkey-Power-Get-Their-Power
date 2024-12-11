@@ -57,7 +57,7 @@ g.set(
     xscale="log",
     yscale="log",
     ylim=(1e-3, None),
-    xlabel=r"Scaling Parameter (Num. Attempts $N$)",
+    xlabel="Scaling Parameter" + r"(Num. Attempts $N$)",
     ylabel=r"$-\log (\text{Attack Success Rate})$",
 )
 sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1))
@@ -82,10 +82,12 @@ g = sns.relplot(
 g.set(
     xscale="log",
     ylabel="Attack Success Rate",
-    xlabel=r"Scaling Parameter (Num. Attempts $N$)",
+    xlabel="Scaling Parameter" + r"(Num. Attempts $N$)",
 )
 # Move legend to the empty subplot position
-g._legend.set_bbox_to_anchor((0.95, 0.27))  # You might need to adjust these values
+g._legend.set_bbox_to_anchor((0.95, 0.25))
+g.fig.suptitle("Best-of-N Jailbreaking")
+g.fig.subplots_adjust(top=0.9)
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
     plot_filename="y=score_vs_x=scaling_parameter_hue=model_col=model_units=problem_idx",
@@ -113,7 +115,9 @@ g.set(
     xlabel=r"Scaling Parameter (Num. Attempts $N$)",
 )
 # Move legend to the empty subplot position
-g._legend.set_bbox_to_anchor((0.95, 0.27))  # You might need to adjust these values
+g._legend.set_bbox_to_anchor((0.95, 0.25))
+g.fig.suptitle("Best-of-N Jailbreaking")
+g.fig.subplots_adjust(top=0.9)
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
     plot_filename="y=neg_log_score_vs_x=scaling_parameter_hue=model_col=model_units=problem_idx",
@@ -153,7 +157,9 @@ g.set(
     xlabel=r"Attack Success Rate at $N=1$",
 )
 # Move legend to the empty subplot position
-g._legend.set_bbox_to_anchor((0.95, 0.27))
+g._legend.set_bbox_to_anchor((0.95, 0.25))
+g.fig.suptitle("Best-of-N Jailbreaking")
+g.fig.subplots_adjust(top=0.9)
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
     plot_filename="y=counts_x=score_hue=model_col=model_bins=custom",
