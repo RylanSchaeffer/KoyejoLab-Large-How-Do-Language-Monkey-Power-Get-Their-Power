@@ -46,10 +46,23 @@ src.plot.save_plot_with_multiple_extensions(
 )
 # plt.show()
 
+
+large_language_monkeys_neg_log_avg_pass_at_k_df = (
+    large_language_monkeys_pass_at_k_df.groupby(
+        ["Model", "Benchmark", "Scaling Parameter"]
+    )["Score"]
+    .mean()
+    .reset_index()
+)
+large_language_monkeys_neg_log_avg_pass_at_k_df["Neg Log Score"] = -np.log(
+    large_language_monkeys_neg_log_avg_pass_at_k_df["Score"]
+)
+
+
 plt.close()
 plt.figure(figsize=(10, 6))
 g = sns.lineplot(
-    data=large_language_monkeys_pass_at_k_df,
+    data=large_language_monkeys_neg_log_avg_pass_at_k_df,
     x="Scaling Parameter",
     y="Neg Log Score",
     hue="Model",
@@ -60,7 +73,7 @@ g.set(
     title="Large Language Monkeys",
     xscale="log",
     yscale="log",
-    ylim=(1e-3, None),
+    ylim=(1e-1, None),
     xlabel=r"Scaling Parameter (Num. Attempts $k$)",
     ylabel=r"$-\log (\mathbb{E}[\text{Coverage}])$",
 )
@@ -80,6 +93,7 @@ g = sns.relplot(
     y="Score",
     units="Problem Idx",
     hue="Model",
+    hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
     col="Model",
     col_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
     col_wrap=4,
@@ -109,6 +123,7 @@ g = sns.relplot(
     y="Neg Log Score",
     units="Problem Idx",
     hue="Model",
+    hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
     col="Model",
     col_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
     col_wrap=4,
@@ -157,6 +172,7 @@ g = sns.displot(
     hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
     bins=all_bins,
     col="Model",
+    col_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
     col_wrap=4,
 )
 g.set(

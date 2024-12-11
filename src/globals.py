@@ -109,6 +109,16 @@ BON_JAILBREAKING_MODALITY_TO_NICE_STRINGS = {
     "vision": "Vision",
 }
 
+BON_JAILBREAKING_MODELS_ORDER = [
+    "Claude 3.5 Sonnet",
+    "Claude 3.5 Opus",
+    "Gemini 1.5 Flash",
+    "Gemini 1.5 Pro",
+    "GPT4o Mini",
+    "GPT4o",
+    "Llama 3 8B IT",
+]
+
 BON_JAILBREAKING_MODELS_TO_NICE_STRINGS = {
     "claude-3-5-sonnet-20240620": "Claude 3.5 Sonnet",
     "claude-3-opus-20240229": "Claude 3.5 Opus",
@@ -140,7 +150,6 @@ LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_TO_NICE_STRINGS = {
     "Pythia_6.9B_300B": "Pythia 6.9B",
     "Pythia_12B_300B": "Pythia 12B",
 }
-
 
 LARGE_LANGUAGE_MONKEYS_ORIGINAL_Ks_LIST = [
     1,

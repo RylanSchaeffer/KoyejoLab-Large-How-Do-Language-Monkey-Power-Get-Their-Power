@@ -17,16 +17,16 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
     refresh=False,
 )
 
-large_language_monkeys_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_original_pass_at_k_df(
-    # refresh=False,
-    refresh=True,
+large_language_monkeys_original_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_original_pass_at_k_df(
+    refresh=False,
+    # refresh=True,
 )
 
 
 plt.close()
 plt.figure(figsize=(10, 6))
 g = sns.lineplot(
-    data=large_language_monkeys_pass_at_k_df,
+    data=large_language_monkeys_original_pass_at_k_df,
     x="Scaling Parameter",
     y="Score",
     hue="Model",
@@ -47,10 +47,22 @@ src.plot.save_plot_with_multiple_extensions(
 )
 # plt.show()
 
+large_language_monkeys_original_neg_log_avg_pass_at_k_df = (
+    large_language_monkeys_original_pass_at_k_df.groupby(
+        ["Model", "Benchmark", "Scaling Parameter"]
+    )["Score"]
+    .mean()
+    .reset_index()
+)
+large_language_monkeys_original_neg_log_avg_pass_at_k_df["Neg Log Score"] = -np.log(
+    large_language_monkeys_original_neg_log_avg_pass_at_k_df["Score"]
+)
+
+
 plt.close()
 plt.figure(figsize=(10, 6))
 g = sns.lineplot(
-    data=large_language_monkeys_pass_at_k_df,
+    data=large_language_monkeys_original_neg_log_avg_pass_at_k_df,
     x="Scaling Parameter",
     y="Neg Log Score",
     hue="Model",
@@ -61,7 +73,7 @@ g.set(
     title="Large Language Monkeys (Original)",
     xscale="log",
     yscale="log",
-    ylim=(1e-3, None),
+    ylim=(1e-1, None),
     xlabel=r"Scaling Parameter (Num. Attempts $k$)",
     ylabel=r"$-\log (\mathbb{E}[\text{Coverage}])$",
 )
@@ -75,7 +87,7 @@ src.plot.save_plot_with_multiple_extensions(
 
 plt.close()
 g = sns.relplot(
-    data=large_language_monkeys_pass_at_k_df,
+    data=large_language_monkeys_original_pass_at_k_df,
     kind="line",
     x="Scaling Parameter",
     y="Score",
@@ -104,7 +116,7 @@ src.plot.save_plot_with_multiple_extensions(
 
 plt.close()
 g = sns.relplot(
-    data=large_language_monkeys_pass_at_k_df,
+    data=large_language_monkeys_original_pass_at_k_df,
     kind="line",
     x="Scaling Parameter",
     y="Neg Log Score",
@@ -134,8 +146,8 @@ src.plot.save_plot_with_multiple_extensions(
 
 plt.close()
 # Create better bins that handle zero and near-zero values
-smallest_nonzero_pass_at_1 = large_language_monkeys_pass_at_k_df[
-    large_language_monkeys_pass_at_k_df["Score"] > 0.0
+smallest_nonzero_pass_at_1 = large_language_monkeys_original_pass_at_k_df[
+    large_language_monkeys_original_pass_at_k_df["Score"] > 0.0
 ]["Score"].min()
 # Round smallest_nonzero_value to the nearest power of 10.
 smallest_nonzero_pass_at_1 = 10.0 ** np.floor(np.log10(smallest_nonzero_pass_at_1))
@@ -148,9 +160,9 @@ all_bins = np.concatenate(
     [[-small_value_for_plotting], [small_value_for_plotting], log_bins]
 )
 g = sns.displot(
-    data=large_language_monkeys_pass_at_k_df[
-        (large_language_monkeys_pass_at_k_df["Scaling Parameter"] == 1)
-        * (large_language_monkeys_pass_at_k_df["Benchmark"] == "MATH")
+    data=large_language_monkeys_original_pass_at_k_df[
+        (large_language_monkeys_original_pass_at_k_df["Scaling Parameter"] == 1)
+        * (large_language_monkeys_original_pass_at_k_df["Benchmark"] == "MATH")
     ],
     kind="hist",
     x="Score",
