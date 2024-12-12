@@ -28,8 +28,8 @@ g = sns.lineplot(
     data=pretraining_probability_df,
     x="Scaling Parameter",
     y="Score",
-    hue="Model Family",
-    style="Dataset",
+    hue="Dataset",
+    style="Model Family",
 )
 g.set(
     title="Language Modeling Pretraining Loss",
@@ -65,8 +65,8 @@ g = sns.lineplot(
     data=pretraining_neg_log_avg_probability_df,
     x="Scaling Parameter",
     y="Neg Log Score",
-    hue="Model Family",
-    style="Dataset",
+    hue="Dataset",
+    style="Model Family",
 )
 g.set(
     title="Language Modeling Pretraining Loss",
@@ -74,6 +74,11 @@ g.set(
     xlabel=r"Scaling Parameter (FLOP)",
     ylabel=r"$-\log \mathbb{E}[p(x_t | x_{<t})$",
     yscale="log",
+)
+sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
+src.plot.save_plot_with_multiple_extensions(
+    plot_dir=results_dir,
+    plot_filename="y=neg_log_avg_score_x=scaling_parameter_hue=model",
 )
 plt.show()
 

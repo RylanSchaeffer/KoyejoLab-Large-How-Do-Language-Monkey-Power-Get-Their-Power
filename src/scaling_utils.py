@@ -1,4 +1,5 @@
 from datasets import load_dataset
+from pyarrow.dataset import dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from typing import Dict, List, Optional
 
@@ -45,7 +46,12 @@ def prepare_pretraining_scaling_dataset(
     dataset_hf_path: str,
     **kwargs,
 ) -> List[str]:
-    if dataset_hf_path == "EleutherAI/lambada_openai":
+    print(f"Creating {dataset_hf_path} sequences...")
+    if dataset_hf_path == "allenai/c4":
+        sequences: List[str] = load_dataset(
+            dataset_hf_path, name="en", split="validation", trust_remote_code=True
+        )["text"]
+    elif dataset_hf_path == "EleutherAI/lambada_openai":
         sequences: List[str] = load_dataset(
             dataset_hf_path, split="test", trust_remote_code=True
         )["text"]
@@ -53,9 +59,17 @@ def prepare_pretraining_scaling_dataset(
         sequences: List[str] = load_dataset(
             dataset_hf_path, "sample-10BT", split="train", trust_remote_code=True
         )["text"]
-    elif dataset_hf_path == "monology/pile-uncopyrighted":
+    elif dataset_hf_path == "JeanKaddour/minipile":
         sequences: List[str] = load_dataset(
             dataset_hf_path, split="test", trust_remote_code=True
+        )["text"]
+    elif dataset_hf_path == "monology/pile-uncopyrighted":
+        sequences: List[str] = load_dataset(
+            dataset_hf_path, split="train", trust_remote_code=True
+        )["text"]
+    elif dataset_hf_path == "togethercomputer/RedPajama-Data-1T-Sample":
+        sequences: List[str] = load_dataset(
+            dataset_hf_path, split="train", trust_remote_code=True
         )["text"]
     else:
         raise NotImplementedError

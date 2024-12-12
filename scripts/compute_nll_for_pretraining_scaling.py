@@ -14,6 +14,8 @@ import src.scaling_utils
 raw_data_dir = "data/raw_data/pretraining_scaling"
 os.makedirs(raw_data_dir, exist_ok=True)
 
+# Max context length is 2048.
+max_context_length = 2048
 model_nicknames_to_huggingface_paths_dict = {
     "Cerebras_111M_2B": "cerebras/Cerebras-GPT-111M",
     "Cerebras_256M_5B": "cerebras/Cerebras-GPT-256M",
@@ -21,31 +23,41 @@ model_nicknames_to_huggingface_paths_dict = {
     "Cerebras_1.3B_26B": "cerebras/Cerebras-GPT-1.3B",
     "Cerebras_2.7B_54B": "cerebras/Cerebras-GPT-2.7B",
     "Cerebras_6.7B_134B": "cerebras/Cerebras-GPT-6.7B",
-    # "Cerebras_13B_260B": "cerebras/Cerebras-GPT-13B",
+    "Cerebras_13B_260B": "cerebras/Cerebras-GPT-13B",
 }
 
 dataset_dict = {
-    "LAMBADA": "EleutherAI/lambada_openai",
-    "Fineweb": "HuggingFaceFW/fineweb",
+    "c4": "allenai/c4",
+    "RedPajama (1T Sample)": "togethercomputer/RedPajama-Data-1T-Sample",  # TODO: Debug why empty.
+    "MiniPile": "JeanKaddour/minipile",
     "The Pile": "monology/pile-uncopyrighted",
+    "Fineweb": "HuggingFaceFW/fineweb",
+    "LAMBADA": "EleutherAI/lambada_openai",
 }
 
-for (
-    model_nickname,
-    huggingface_path,
-) in model_nicknames_to_huggingface_paths_dict.items():
-    tokenizer = AutoTokenizer.from_pretrained(huggingface_path, trust_remote_code=True)
-    model = AutoModelForCausalLM.from_pretrained(
-        huggingface_path,
-        device_map="auto",
-        trust_remote_code=True,
-        torch_dtype=torch.float32,
-    )
-
-    for dataset_name, dataset_hf_path in dataset_dict.items():
+for dataset_name, dataset_hf_path in dataset_dict.items():
+    try:
         sequences: List[str] = src.scaling_utils.prepare_pretraining_scaling_dataset(
             dataset_hf_path=dataset_hf_path,
         )
+    except Exception as e:
+        print(f"Error: {e}")
+        continue
+
+    for (
+        model_nickname,
+        huggingface_path,
+    ) in model_nicknames_to_huggingface_paths_dict.items():
+        tokenizer = AutoTokenizer.from_pretrained(
+            huggingface_path, trust_remote_code=True
+        )
+        model = AutoModelForCausalLM.from_pretrained(
+            huggingface_path,
+            device_map="auto",
+            trust_remote_code=True,
+            torch_dtype=torch.float32,
+        )
+
         log_probs_dict = {
             "log_probs": [],
             "Problem Idx": [],
@@ -53,17 +65,30 @@ for (
         }
         for sample_idx, sequence in enumerate(sequences[:10]):
             encoded_sequence = tokenizer(
-                sequence, return_tensors="pt", add_special_tokens=False
+                sequence,
+                return_tensors="pt",
+                add_special_tokens=False,
+                truncation=True,
+                max_length=max_context_length,
             ).to(model.device)
+
             with torch.no_grad():
+                input_ids = encoded_sequence.input_ids
+                labels = input_ids.clone()
+                labels = labels[:, 1:]  # Remove first position
+
                 output = model(**encoded_sequence)
+
                 logits = output.logits
+                logits = logits[
+                    :, :-1, :
+                ]  # Remove last position as it has nothing to predict
                 # Apply log softmax over vocabulary dimension
                 log_probs = torch.log_softmax(logits, dim=-1)
                 # Gather log probs for the actual tokens in the sequence.
                 # Shape: (sequence_length,)
                 token_log_probs = torch.gather(
-                    log_probs, 2, encoded_sequence.input_ids.unsqueeze(-1)
+                    log_probs, 2, labels.unsqueeze(-1)
                 ).squeeze()
 
             sequence_indices = torch.arange(
@@ -85,5 +110,7 @@ for (
             index=False,
         )
         print(f"Saved log probs for {model_nickname} on {dataset_name}.")
+
+        del model, tokenizer, log_probs_dict, log_probs_df
 
         # print()
