@@ -1,5 +1,6 @@
 from datasets import load_dataset
 from pyarrow.dataset import dataset
+import random
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from typing import Dict, List, Optional
 
@@ -65,7 +66,7 @@ def prepare_pretraining_scaling_dataset(
         )["text"]
     elif dataset_hf_path == "monology/pile-uncopyrighted":
         sequences: List[str] = load_dataset(
-            dataset_hf_path, split="train", trust_remote_code=True
+            dataset_hf_path, split="test", trust_remote_code=True
         )["text"]
     elif dataset_hf_path == "togethercomputer/RedPajama-Data-1T-Sample":
         sequences: List[str] = load_dataset(
@@ -73,4 +74,9 @@ def prepare_pretraining_scaling_dataset(
         )["text"]
     else:
         raise NotImplementedError
+
+    # Deterministically shuffle sequences.
+    random.seed(0)
+    random.shuffle(sequences)
+    print(f"Created {dataset_hf_path}. Number of sequences: {len(sequences)}.")
     return sequences

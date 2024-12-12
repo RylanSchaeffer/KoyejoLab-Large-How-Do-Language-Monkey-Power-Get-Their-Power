@@ -129,6 +129,14 @@ BON_JAILBREAKING_MODELS_TO_NICE_STRINGS = {
     "meta-llama-Meta-Llama-3-8B-Instruct": "Llama 3 8B IT",
 }
 
+CAUSAL_LANGUAGE_MODELING_DATASETS_ORDER = [
+    "MiniPile",
+    "RedPajama (1T Sample)",
+    "LAMBADA",
+    "Fineweb",
+]
+
+
 GPT4_GSM8K_MODEL_FAMILY_ORDER = [
     "Pythia",
 ]

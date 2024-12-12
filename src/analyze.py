@@ -461,6 +461,14 @@ def create_or_load_pretraining_probability_df(
             dfs_list.append(df)
 
         pretraining_probability_df = pd.concat(dfs_list)
+
+        # Create a unique token index from "Problem Idx" and "Seq Idx"
+        pretraining_probability_df["Token Idx"] = (
+            pretraining_probability_df["Problem Idx"]
+            * pretraining_probability_df["Seq Idx"].max()
+            + pretraining_probability_df["Seq Idx"]
+        )
+
         pretraining_probability_df.rename(
             columns={
                 "log_probs": "Log Score",

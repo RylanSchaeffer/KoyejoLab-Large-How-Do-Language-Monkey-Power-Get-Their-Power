@@ -27,12 +27,12 @@ model_nicknames_to_huggingface_paths_dict = {
 }
 
 dataset_dict = {
-    "c4": "allenai/c4",
-    "RedPajama (1T Sample)": "togethercomputer/RedPajama-Data-1T-Sample",  # TODO: Debug why empty.
+    # "c4": "allenai/c4",
+    # "The Pile": "monology/pile-uncopyrighted",
     "MiniPile": "JeanKaddour/minipile",
-    "The Pile": "monology/pile-uncopyrighted",
-    "Fineweb": "HuggingFaceFW/fineweb",
     "LAMBADA": "EleutherAI/lambada_openai",
+    "RedPajama (1T Sample)": "togethercomputer/RedPajama-Data-1T-Sample",
+    "Fineweb": "HuggingFaceFW/fineweb",
 }
 
 for dataset_name, dataset_hf_path in dataset_dict.items():
@@ -63,7 +63,8 @@ for dataset_name, dataset_hf_path in dataset_dict.items():
             "Problem Idx": [],
             "Seq Idx": [],
         }
-        for sample_idx, sequence in enumerate(sequences[:10]):
+        for sample_idx, sequence in enumerate(sequences[:1000]):
+            # for sample_idx, sequence in enumerate(sequences[:10]):
             encoded_sequence = tokenizer(
                 sequence,
                 return_tensors="pt",
