@@ -13,3 +13,7 @@
 3. Install the required packages:
 
 `conda install -c conda-forge numpy pandas scipy matplotlib seaborn pyarrow fsspec datasets huggingface_hub -y`
+
+4. If generating the Many-Shot Jailbreaking data:
+
+`conda install pytorch-gpu torchvision torchaudio pytorch-cuda=12.4 -c pytorch -c nvidia -y`

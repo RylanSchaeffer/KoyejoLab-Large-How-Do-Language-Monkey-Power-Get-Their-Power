@@ -438,6 +438,70 @@ def create_or_load_large_language_monkeys_original_pass_at_k_df(
     return large_language_monkeys_original_pass_at_k_df
 
 
+def create_or_load_pretraining_probability_df(
+    raw_data_dir=f"{os.getcwd()}/data/raw_data",
+    processed_data_dir=f"{os.getcwd()}/data/processed_data",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    pretraining_probability_df_path = os.path.join(
+        processed_data_dir, "pretraining_probability.parquet"
+    )
+    if refresh or not os.path.exists(pretraining_probability_df_path):
+        print(f"Creating {pretraining_probability_df_path} anew...")
+        os.makedirs(processed_data_dir, exist_ok=True)
+        dfs_list = []
+        for parquet_filename in os.listdir(
+            os.path.join(raw_data_dir, "pretraining_scaling")
+        ):
+            if not parquet_filename.endswith(".parquet"):
+                continue
+            df = pd.read_parquet(
+                os.path.join(raw_data_dir, "pretraining_scaling", parquet_filename)
+            )
+            dfs_list.append(df)
+
+        pretraining_probability_df = pd.concat(dfs_list)
+        pretraining_probability_df.rename(
+            columns={
+                "log_probs": "Log Score",
+            },
+            inplace=True,
+        )
+        pretraining_probability_df["Score"] = np.exp(
+            pretraining_probability_df["Log Score"]
+        )
+        pretraining_probability_df["Neg Log Score"] = -pretraining_probability_df[
+            "Log Score"
+        ]
+
+        models_metadata_df = pd.read_csv(
+            os.path.join(raw_data_dir, "pretraining_scaling", "models.csv")
+        )
+        models_metadata_df["Scaling Parameter"] = (
+            6.0 * models_metadata_df["Tokens"] * models_metadata_df["Parameters"]
+        )
+
+        pretraining_probability_df = pretraining_probability_df.merge(
+            models_metadata_df[["Model Nickname", "Model Family", "Scaling Parameter"]],
+            how="inner",
+            on="Model Nickname",
+        )
+
+        pretraining_probability_df.to_parquet(
+            pretraining_probability_df_path,
+            index=False,
+        )
+        print(f"Wrote {pretraining_probability_df_path} to disk.")
+        del pretraining_probability_df
+
+    pretraining_probability_df = pd.read_parquet(pretraining_probability_df_path)
+    print(
+        "Loaded pretraining_probability_df_path with shape: ",
+        pretraining_probability_df.shape,
+    )
+    return pretraining_probability_df
+
+
 def estimate_pass_at_k(
     num_samples_total: Union[int, List[int], np.ndarray],
     num_samples_correct: Union[List[int], np.ndarray],

@@ -1,29 +1,44 @@
 import os
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
-from datasets import load_dataset
-import pandas as pd
-import pickle
+
 import time
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from typing import Dict
 
+import src.scaling_utils
 
 model_names_to_max_context_lengths_dict = {
+    "google/gemma-2-2b": 8192,
     "google/gemma-2-9b": 8192,
     "google/gemma-2-27b": 8192,
     "mistralai/Ministral-8B-Instruct-2410": 128_000,
     "Qwen/Qwen2-7B-Instruct": 32_768,
 }
 
-paths_and_names_list = [
-    {"path": "truthfulqa/truthful_qa", "name": "generation"},
-    {"path": "cais/mmlu", "name": "all"},
+paths_and_optional_names_list = [
+    {"dataset_path": "EleutherAI/logiqa"},
+    {"dataset_path": "mrqa-workshop/mrqa", "dataset_name": "TriviaQA-web"},
+    {"dataset_path": "truthfulqa/truthful_qa", "dataset_name": "generation"},
+    {"dataset_path": "cais/mmlu", "dataset_name": "all"},
 ]
 
-for path_and_name in paths_and_names_list:
-    ds = load_dataset(path_and_name["path"], path_and_name["all"])
+# for model_name in model_names_to_max_context_lengths_dict.keys():
+#     tokenizer = AutoTokenizer.from_pretrained(model_name)
+#     model = AutoModelForCausalLM.from_pretrained(model_name).to("cuda")
+
+for model_name in model_names_to_max_context_lengths_dict:
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(model_name).to("cuda")
+    for path_and_optional_name in paths_and_optional_names_list:
+        prompts_and_answers_dict = (
+            src.msj_utils.prepare_in_context_scaling_questions_answers(
+                **path_and_optional_name,
+            )
+        )
+        print()
 
 
 # pkl_file_path = os.path.join(
