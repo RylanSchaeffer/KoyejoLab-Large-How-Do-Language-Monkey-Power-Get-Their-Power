@@ -128,6 +128,96 @@ def create_or_load_bon_jailbreaking_pass_at_k_df(
     return models_gsm8k_pass_at_k_df
 
 
+def create_or_load_gpt4_gsm8k_prob_answer_given_problem_df(
+    raw_data_dir=f"{os.getcwd()}/data/raw_data",
+    processed_data_dir=f"{os.getcwd()}/data/processed_data",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    gpt4_gsm8k_neg_log_likelihood_df_path = os.path.join(
+        processed_data_dir, "gpt4_gsm8k_neg_log_likelihood.parquet"
+    )
+
+    if refresh or not os.path.exists(gpt4_gsm8k_neg_log_likelihood_df_path):
+        print("Creating gpt4_gsm8k_neg_log_likelihood_df_path anew...")
+
+        os.makedirs(processed_data_dir, exist_ok=True)
+        gpt4_gsm8k_neg_log_likelihood_df = pd.read_csv(
+            os.path.join(raw_data_dir, "gpt4_gsm8k", "pythia_gsm8k_log_likelihoods.csv")
+        )
+        model_nicknames_to_keep = [
+            "Pythia_14M_20B",
+            "Pythia_70M_60B",
+            "Pythia_160M_60B",
+            "Pythia_410M_200B",
+            "Pythia_1B_300B",
+            "Pythia_1.4B_300B",
+            "Pythia_2.8B_300B",
+            "Pythia_6.9B_300B",
+            "Pythia_12B_300B",
+        ]
+        gpt4_gsm8k_neg_log_likelihood_df = gpt4_gsm8k_neg_log_likelihood_df[
+            gpt4_gsm8k_neg_log_likelihood_df["Model Nickname"].isin(
+                model_nicknames_to_keep
+            )
+        ]
+
+        gpt4_gsm8k_summed_neg_log_likelihood_df = (
+            gpt4_gsm8k_neg_log_likelihood_df.groupby(["Model Nickname", "prompt_idx"])[
+                "Neg Log Likelihood"
+            ]
+            .sum()
+            .reset_index()
+        )
+
+        models_metadata_df = pd.read_csv(
+            os.path.join(raw_data_dir, "gpt4_gsm8k", "models_pythia.csv")
+        )
+        models_metadata_df["Pretraining Compute"] = (
+            6.0 * models_metadata_df["Tokens"] * models_metadata_df["Parameters"]
+        )
+
+        gpt4_gsm8k_summed_neg_log_likelihood_df = (
+            gpt4_gsm8k_summed_neg_log_likelihood_df.merge(
+                models_metadata_df[
+                    ["Model Nickname", "Model Family", "Pretraining Compute"]
+                ],
+                how="inner",
+                on="Model Nickname",
+            )
+        )
+        gpt4_gsm8k_summed_neg_log_likelihood_df["Score"] = np.exp(
+            -gpt4_gsm8k_summed_neg_log_likelihood_df["Neg Log Likelihood"]
+        )
+        gpt4_gsm8k_summed_neg_log_likelihood_df[
+            "Log Score"
+        ] = -gpt4_gsm8k_summed_neg_log_likelihood_df["Neg Log Likelihood"]
+        gpt4_gsm8k_summed_neg_log_likelihood_df.rename(
+            columns={
+                "Neg Log Likelihood": "Neg Log Score",
+                "Model Nickname": "Model",
+                "Pretraining Compute": "Scaling Parameter",
+                "prompt_idx": "Problem Idx",
+            },
+            inplace=True,
+        )
+
+        gpt4_gsm8k_summed_neg_log_likelihood_df.to_parquet(
+            gpt4_gsm8k_neg_log_likelihood_df_path,
+            index=False,
+        )
+        del gpt4_gsm8k_summed_neg_log_likelihood_df
+
+    gpt4_gsm8k_neg_log_likelihood_df = pd.read_parquet(
+        gpt4_gsm8k_neg_log_likelihood_df_path
+    )
+    print(
+        "Loaded gpt4_gsm8k_neg_log_likelihood_df_path with shape: ",
+        gpt4_gsm8k_neg_log_likelihood_df.shape,
+    )
+
+    return gpt4_gsm8k_neg_log_likelihood_df
+
+
 def create_or_load_large_language_monkeys_pass_at_k_df(
     raw_data_dir=f"{os.getcwd()}/data/raw_data",
     processed_data_dir=f"{os.getcwd()}/data/processed_data",
