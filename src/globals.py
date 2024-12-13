@@ -131,7 +131,7 @@ BON_JAILBREAKING_MODELS_TO_NICE_STRINGS = {
 
 CAUSAL_LANGUAGE_MODELING_DATASETS_ORDER = [
     "MiniPile",
-    "RedPajama (1T Sample)",
+    "RedPajama",
     "LAMBADA",
     "Fineweb",
 ]

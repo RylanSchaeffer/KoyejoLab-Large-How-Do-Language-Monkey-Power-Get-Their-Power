@@ -18,8 +18,8 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
 )
 
 causal_language_modeling_probability_df = src.analyze.create_or_load_pretraining_probability_df(
-    # refresh=False,
-    refresh=True,
+    refresh=False,
+    # refresh=True,
 )
 
 plt.close()
@@ -116,17 +116,33 @@ src.plot.save_plot_with_multiple_extensions(
 # plt.show()
 
 # Subsample 1000 token indices per Dataset.
-subsampled_token_indices = causal_language_modeling_probability_df["Token Idx"].sample(
-    n=1000, random_state=0
+subsampled_causal_language_modeling_probability_dfs_list = []
+
+# Loop through each dataset
+for dataset in src.globals.CAUSAL_LANGUAGE_MODELING_DATASETS_ORDER:
+    # Get dataframe subset for this dataset
+    dataset_df = causal_language_modeling_probability_df[
+        causal_language_modeling_probability_df["Dataset"] == dataset
+    ]
+
+    # Sample 1000 unique Token Idx values from this dataset
+    sampled_tokens = dataset_df["Token Idx"].unique()
+    sampled_tokens = np.random.RandomState(0).choice(
+        sampled_tokens, size=min(250, len(sampled_tokens)), replace=False
+    )
+
+    # Get all rows for these token indices
+    dataset_sampled = dataset_df[dataset_df["Token Idx"].isin(sampled_tokens)]
+    subsampled_causal_language_modeling_probability_dfs_list.append(dataset_sampled)
+
+# Concatenate all subsampled dataframes.
+subsampled_causal_language_modeling_probability_df = pd.concat(
+    subsampled_causal_language_modeling_probability_dfs_list, axis=0
 )
 
 plt.close()
 g = sns.relplot(
-    data=causal_language_modeling_probability_df[
-        causal_language_modeling_probability_df["Token Idx"].isin(
-            subsampled_token_indices
-        )
-    ],
+    data=subsampled_causal_language_modeling_probability_df,
     kind="line",
     x="Scaling Parameter",
     y="Score",
@@ -137,6 +153,7 @@ g = sns.relplot(
     col_order=src.globals.CAUSAL_LANGUAGE_MODELING_DATASETS_ORDER,
     col_wrap=4,
     estimator=None,
+    alpha=0.1,
 )
 g.set(
     xscale="log",
@@ -157,11 +174,7 @@ src.plot.save_plot_with_multiple_extensions(
 
 plt.close()
 g = sns.relplot(
-    data=causal_language_modeling_probability_df[
-        causal_language_modeling_probability_df["Token Idx"].isin(
-            subsampled_token_indices
-        )
-    ],
+    data=subsampled_causal_language_modeling_probability_df,
     kind="line",
     x="Scaling Parameter",
     y="Neg Log Score",
@@ -172,11 +185,12 @@ g = sns.relplot(
     col_order=src.globals.CAUSAL_LANGUAGE_MODELING_DATASETS_ORDER,
     col_wrap=4,
     estimator=None,
+    alpha=0.1,
 )
 g.set(
     xscale="log",
     yscale="log",
-    ylim=(1e-2, 1e1),
+    ylim=(1e-2, None),
     ylabel=r"$-\log p(x_t | x_{<t})$",
     xlabel="Scaling Parameter (Pretraining FLOP)",
 )
@@ -188,7 +202,7 @@ src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
     plot_filename="y=neg_log_score_vs_x=scaling_parameter_hue=dataset_col=dataset_units=token_idx",
 )
-# plt.show()
+plt.show()
 
 
 print("Finished notebooks/04_pretraining_scaling_eda/04_pretraining_scaling_eda.py!")
