@@ -130,12 +130,14 @@ BON_JAILBREAKING_MODELS_TO_NICE_STRINGS = {
 }
 
 CAUSAL_LANGUAGE_MODELING_DATASETS_ORDER = [
+    "The Pile",
     "MiniPile",
+    "C4",
     "RedPajama",
     "LAMBADA",
     "Fineweb",
+    "Zyda-2",
 ]
-
 
 GPT4_GSM8K_MODEL_FAMILY_ORDER = [
     "Pythia",

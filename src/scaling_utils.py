@@ -50,7 +50,10 @@ def prepare_pretraining_scaling_dataset(
     print(f"Creating {dataset_hf_path} sequences...")
     if dataset_hf_path == "allenai/c4":
         sequences: List[str] = load_dataset(
-            dataset_hf_path, name="en", split="validation", trust_remote_code=True
+            dataset_hf_path,
+            split="validation",
+            data_files={"validation": "en/c4-validation.00000-of-00008.json.gz"},
+            trust_remote_code=True,
         )["text"]
     elif dataset_hf_path == "EleutherAI/lambada_openai":
         sequences: List[str] = load_dataset(
@@ -64,7 +67,7 @@ def prepare_pretraining_scaling_dataset(
         sequences: List[str] = load_dataset(
             dataset_hf_path, split="test", trust_remote_code=True
         )["text"]
-    elif dataset_hf_path == "monology/pile-uncopyrighted":
+    elif dataset_hf_path == "monology/pile-test-val":
         sequences: List[str] = load_dataset(
             dataset_hf_path, split="test", trust_remote_code=True
         )["text"]
@@ -72,6 +75,10 @@ def prepare_pretraining_scaling_dataset(
         sequences: List[str] = load_dataset(
             dataset_hf_path, split="train", trust_remote_code=True
         )["text"]
+    elif dataset_hf_path == "Zyphra/Zyda-2":
+        sequences = load_dataset("Zyphra/Zyda-2", name="sample-100BT", split="train")[
+            "text"
+        ]
     else:
         raise NotImplementedError
 

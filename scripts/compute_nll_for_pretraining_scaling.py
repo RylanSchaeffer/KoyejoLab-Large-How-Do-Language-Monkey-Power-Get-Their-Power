@@ -28,7 +28,8 @@ model_nicknames_to_huggingface_paths_dict = {
 
 dataset_dict = {
     # "c4": "allenai/c4",
-    "The Pile": "monology/pile-uncopyrighted",
+    "Zyda-2": "Zyphra/Zyda-2",
+    # "The Pile": "monology/pile-test-val",
     # "MiniPile": "JeanKaddour/minipile",
     # "LAMBADA": "EleutherAI/lambada_openai",
     # "RedPajama": "togethercomputer/RedPajama-Data-1T-Sample",

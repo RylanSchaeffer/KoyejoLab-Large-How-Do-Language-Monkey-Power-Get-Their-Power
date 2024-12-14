@@ -194,6 +194,9 @@ g.set(
     ylabel=r"$-\log p(x_t | x_{<t})$",
     xlabel="Scaling Parameter (Pretraining FLOP)",
 )
+# Increase the alpha values in the legend handles.
+for legend_handle in g._legend.legend_handles:
+    legend_handle.set_alpha(1.0)  # Reset transparency to full opacity
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))
 g.fig.suptitle("Causal Language Modeling")
@@ -202,7 +205,52 @@ src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
     plot_filename="y=neg_log_score_vs_x=scaling_parameter_hue=dataset_col=dataset_units=token_idx",
 )
-plt.show()
+# plt.show()
+
+
+plt.close()
+# Create better bins that handle zero and near-zero values
+smallest_nonzero_pass_at_1 = subsampled_causal_language_modeling_probability_df[
+    subsampled_causal_language_modeling_probability_df["Score"] > 0.0
+]["Score"].min()
+# Round smallest_nonzero_value to the nearest power of 10.
+smallest_nonzero_pass_at_1 = 10.0 ** np.floor(np.log10(smallest_nonzero_pass_at_1))
+log10_smallest_nonzero_pass_at_1 = np.log10(smallest_nonzero_pass_at_1)
+log_bins = np.logspace(
+    log10_smallest_nonzero_pass_at_1, 0, -int(log10_smallest_nonzero_pass_at_1) * 3 + 1
+)
+small_value_for_plotting = smallest_nonzero_pass_at_1 / 2.0
+all_bins = np.concatenate(
+    [[-small_value_for_plotting], [small_value_for_plotting], log_bins]
+)
+g = sns.displot(
+    data=subsampled_causal_language_modeling_probability_df[
+        subsampled_causal_language_modeling_probability_df["Scaling Parameter"]
+        == subsampled_causal_language_modeling_probability_df["Scaling Parameter"].min()
+    ],
+    kind="hist",
+    x="Score",
+    hue="Dataset",
+    hue_order=src.globals.CAUSAL_LANGUAGE_MODELING_DATASETS_ORDER,
+    bins=all_bins,
+    col="Dataset",
+    col_order=src.globals.CAUSAL_LANGUAGE_MODELING_DATASETS_ORDER,
+    col_wrap=4,
+)
+g.set(
+    xscale="log",
+    ylabel="Count",
+    xlabel=r"$p(x_{t} | x_{<t})$",
+)
+# Move legend to the empty subplot position
+g._legend.set_bbox_to_anchor((0.95, 0.25))
+g.fig.suptitle("Causal Language Modeling")
+g.fig.subplots_adjust(top=0.9)
+src.plot.save_plot_with_multiple_extensions(
+    plot_dir=results_dir,
+    plot_filename="y=counts_x=score_hue=model_col=dataset_bins=custom",
+)
+# plt.show()
 
 
 print("Finished notebooks/04_pretraining_scaling_eda/04_pretraining_scaling_eda.py!")

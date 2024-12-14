@@ -34,7 +34,7 @@ g = sns.lineplot(
     style="Benchmark",
 )
 g.set(
-    title="Large Language Monkeys (Original)",
+    title="Large Language Monkeys",
     xscale="log",
     xlabel=r"Scaling Parameter (Num. Attempts $k$)",
     ylabel=r"$\mathbb{E}[\text{Coverage}]$",
@@ -70,7 +70,7 @@ g = sns.lineplot(
     style="Benchmark",
 )
 g.set(
-    title="Large Language Monkeys (Original)",
+    title="Large Language Monkeys",
     xscale="log",
     yscale="log",
     ylim=(1e-1, None),
@@ -105,7 +105,7 @@ g.set(
 )
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))  # You might need to adjust these values
-g.fig.suptitle("Large Language Monkeys (Original)")
+g.fig.suptitle("Large Language Monkeys")
 g.fig.subplots_adjust(top=0.9)
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
@@ -137,7 +137,7 @@ g.set(
 )
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))  # You might need to adjust these values
-g.fig.suptitle("Large Language Monkeys (Original)")
+g.fig.suptitle("Large Language Monkeys")
 g.fig.subplots_adjust(top=0.9)
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
@@ -177,11 +177,11 @@ g = sns.displot(
 g.set(
     xscale="log",
     ylabel="Count",
-    xlabel=r"$\mathbb{E}[\text{Coverage}]$",
+    xlabel="pass@1",
 )
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))
-g.fig.suptitle("Large Language Monkeys (Original)")
+g.fig.suptitle("Large Language Monkeys")
 g.fig.subplots_adjust(top=0.9)
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
