@@ -17,13 +17,13 @@ raw_data_dir = "data/raw_data/many_shot_icl"
 os.makedirs(raw_data_dir, exist_ok=True)
 
 model_nicknames_to_huggingface_paths_and_max_context_lengths_dict = {
-    "Gemma 2 2B": ("google/gemma-2-2b", 8192),  # 8192
-    "Gemma 2 9B": ("google/gemma-2-9b", 8192),
-    "Llama 3 8B": ("meta-llama/Meta-Llama-3-8B", 8192),
+    # "Gemma 2 2B": ("google/gemma-2-2b", 8192),  # 8192
+    # "Gemma 2 9B": ("google/gemma-2-9b", 8192),
+    # "Llama 3 8B": ("meta-llama/Meta-Llama-3-8B", 8192),
     "Mistral v0.3 7B": ("mistralai/Mistral-7B-v0.3", 8192),  # 32768
     # "OLMo-2 7B": ("allenai/OLMo-2-1124-7B", 4096),
     # "OLMo-2 13B": ("allenai/OLMo-2-1124-13B", 4096),
-    "Qwen 2.5 7B": ("Qwen/Qwen2.5-7B", 131072),
+    "Qwen 2.5 7B": ("Qwen/Qwen2.5-7B", 8192),  # 131072
     "Qwen 2 0.5B": ("Qwen/Qwen2-0.5B", 8192),  # 131072
     "Qwen 2 1.5B": ("Qwen/Qwen2-1.5B", 8192),  # 131072
 }

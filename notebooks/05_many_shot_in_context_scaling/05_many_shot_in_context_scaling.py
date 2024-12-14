@@ -38,7 +38,7 @@ g.set(
     xlabel=r"Scaling Parameter (Num. Shots)",
     yscale="log",
     ylabel=r"$\mathbb{E}[p(a_t | q_t, a_{<t}, q_{<t})]$",
-    ylim=(1e-1, None),
+    # ylim=(1e-1, None),
 )
 sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
 src.plot.save_plot_with_multiple_extensions(
@@ -68,14 +68,14 @@ g = sns.lineplot(
     x="Scaling Parameter",
     y="Neg Log Score",
     hue="Dataset",
-    hue_order=src.globals.CAUSAL_LANGUAGE_MODELING_DATASETS_ORDER,
+    hue_order=src.globals.MANY_SHOT_IN_CONTEXT_LEARNING_DATASET_ORDER,
     style="Model",
 )
 g.set(
-    title="Causal Language Modeling",
+    title="Many-Shot In-Context Learning",
     xscale="log",
     xlabel=r"Scaling Parameter (Pretraining FLOP)",
-    ylabel=r"$-\log \mathbb{E}[p(x_t | x_{<t})]$",
+    ylabel=r"$-\log \mathbb{E}[p(a_t | q_t, a_{<t}, q_{<t})]$",
     yscale="log",
 )
 sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
