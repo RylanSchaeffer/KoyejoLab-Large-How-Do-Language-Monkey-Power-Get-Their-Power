@@ -1,46 +1,95 @@
 from datasets import load_dataset
-from pyarrow.dataset import dataset
+import numpy as np
+import pandas as pd
 import random
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 
-def prepare_in_context_scaling_questions_answers(
-    dataset_path: str,
-    dataset_name: Optional[str] = None,
-) -> Dict[str, List[str]]:
-    if dataset_path == "EleutherAI/logiqa":
-        ds = load_dataset(dataset_path)["test"]
-        prompts: List[str] = [
-            f"{context} {query}"
+MODEL_HF_PATH_TO_QUESTION_TOKENS = {
+    "google/gemma-2-2b": [9413, 235292],
+    "google/gemma-2-9b": [9413, 235292],
+}
+
+MODEL_HF_PATH_TO_ANSWER_TOKENS = {
+    "google/gemma-2-2b": [1261, 235292],
+    "google/gemma-2-9b": [1261, 235292],
+}
+
+
+def extract_log_probs_of_answers(
+    model_hf_path: str,
+    questions_and_answers_token_ids: List[int],
+    token_log_probs: np.ndarray,
+):
+    question_token_ids: List[int] = MODEL_HF_PATH_TO_QUESTION_TOKENS[model_hf_path]
+    answer_token_ids: List[int] = MODEL_HF_PATH_TO_ANSWER_TOKENS[model_hf_path]
+
+    # Identify the slices of token IDs corresponding to the answers.
+    answer_start_indices = []
+    question_start_indices = []
+    for i in range(len(questions_and_answers_token_ids)):
+        if (
+            questions_and_answers_token_ids[i : i + len(question_token_ids)]
+            == question_token_ids
+        ):
+            question_start_indices.append(i + len(question_token_ids))
+        if (
+            questions_and_answers_token_ids[i : i + len(answer_token_ids)]
+            == answer_token_ids
+        ):
+            answer_start_indices.append(i + len(answer_token_ids))
+    # Add length of questions and answers to handle last answer.
+    question_start_indices.append(len(questions_and_answers_token_ids))
+
+    sequence_indices = list(range(len(questions_and_answers_token_ids)))
+
+    # Slice log probabilities of the answer tokens.
+    log_probs_dict = {
+        "log_probs": [],
+        "Problem Idx": [],
+        "Seq Idx": [],
+    }
+    for problem_idx, (start_token_idx, end_token_idx_exclusive) in enumerate(
+        zip(answer_start_indices[:-1], question_start_indices[1:])
+    ):
+        token_log_probs_slice = token_log_probs[start_token_idx:end_token_idx_exclusive]
+        log_probs_dict["log_probs"].extend(token_log_probs_slice.tolist())
+        log_probs_dict["Problem Idx"].extend([problem_idx] * len(token_log_probs_slice))
+        log_probs_dict["Seq Idx"].extend(
+            sequence_indices[start_token_idx:end_token_idx_exclusive]
+        )
+    log_probs_df = pd.DataFrame.from_dict(log_probs_dict)
+    return log_probs_df
+
+
+def prepare_many_shot_in_context_scaling_dataset(
+    dataset_hf_path: str,
+) -> Tuple[List[str], List[str]]:
+    if dataset_hf_path == "EleutherAI/logiqa":
+        ds = load_dataset(dataset_hf_path)["test"]
+        questions: List[str] = [
+            f"Question: {context}\n{query}"
             for context, query in zip(ds["context"], ds["question"])
         ]
         answers: List[str] = [
-            option[ord(label) - ord("a")]
+            f"Answer: {option[ord(label) - ord('a')]}"
             for option, label in zip(ds["options"], ds["label"])
         ]
-    elif dataset_path == "mrqa-workshop/mrqa" and dataset_name == "TriviaQA-web":
-        # ds = load_dataset(dataset_path)
-        # ds = ds.filter(lambda x: x["subset"] == dataset_name, num_proc=10)
-        # print()
-        raise NotImplementedError
-    elif dataset_path == "truthfulqa/truthful_qa" and dataset_name == "generation":
-        ds = load_dataset(dataset_path, dataset_name)["validation"]
-        ds = ds.filter(lambda x: x["type"] == "Non-Adversarial", num_proc=10)
-        prompts: List[str] = ds["question"]
-        answers: List[str] = ds["best_answer"]
+    # elif dataset_hf_path == "mrqa-workshop/mrqa" and dataset_name == "TriviaQA-web":
+    #     # ds = load_dataset(dataset_path)
+    #     # ds = ds.filter(lambda x: x["subset"] == dataset_name, num_proc=10)
+    #     # print()
+    #     raise NotImplementedError
+    # elif dataset_hf_path == "truthfulqa/truthful_qa" and dataset_name == "generation":
+    #     ds = load_dataset(dataset_hf_path, dataset_name)["validation"]
+    #     ds = ds.filter(lambda x: x["type"] == "Non-Adversarial", num_proc=10)
+    #     prompts: List[str] = ds["question"]
+    #     answers: List[str] = ds["best_answer"]
     else:
         raise NotImplementedError
 
-    assert len(prompts) == len(answers)
-    indices = list(range(len(prompts)))
-
-    prompts_and_answers_dict = {
-        "prompt": prompts,
-        "answers": answers,
-        "indices": indices,
-    }
-    return prompts_and_answers_dict
+    return questions, answers
 
 
 def prepare_pretraining_scaling_dataset(

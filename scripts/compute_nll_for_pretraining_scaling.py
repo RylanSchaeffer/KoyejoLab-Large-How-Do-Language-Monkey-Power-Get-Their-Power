@@ -14,7 +14,6 @@ import src.scaling_utils
 raw_data_dir = "data/raw_data/pretraining_scaling"
 os.makedirs(raw_data_dir, exist_ok=True)
 
-# Max context length is 2048.
 max_context_length = 2048
 model_nicknames_to_huggingface_paths_dict = {
     "Cerebras_111M_2B": "cerebras/Cerebras-GPT-111M",
@@ -114,5 +113,3 @@ for dataset_name, dataset_hf_path in dataset_dict.items():
         print(f"Saved log probs for {model_nickname} on {dataset_name}.")
 
         del model, tokenizer, log_probs_dict, log_probs_df
-
-        # print()
