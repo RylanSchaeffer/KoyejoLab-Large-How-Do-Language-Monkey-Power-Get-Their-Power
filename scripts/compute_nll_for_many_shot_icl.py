@@ -8,10 +8,11 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from typing import Dict, List, Tuple
 
+import src.globals
 import src.scaling_utils
 
 
-raw_data_dir = "data/raw_data/many_shot_in_context_learning"
+raw_data_dir = "data/raw_data/many_shot_icl"
 os.makedirs(raw_data_dir, exist_ok=True)
 
 max_context_length = 2048
@@ -24,22 +25,18 @@ model_nicknames_to_huggingface_paths_dict = {
     # "Cerebras_6.7B_134B": "cerebras/Cerebras-GPT-6.7B",
     # "Cerebras_13B_260B": "cerebras/Cerebras-GPT-13B",
     "Gemma 2 2B": ("google/gemma-2-2b", 8192),
-    "Gemma 2 9B": ("google/gemma-2-9b", 8192),
-    "Llama 3 8B": ("meta-llama/Meta-Llama-3-8B", 8192),
-    "Qwen 2.5 7B": ("Qwen/Qwen2.5-7B", 131072),
-    "Mistral v0.3 7B": ("mistralai/Mistral-7B-v0.3", 32768),
+    # "Gemma 2 9B": ("google/gemma-2-9b", 8192),
+    # "Llama 3 8B": ("meta-llama/Meta-Llama-3-8B", 8192),
+    # "Qwen 2.5 7B": ("Qwen/Qwen2.5-7B", 131072),
+    # "Mistral v0.3 7B": ("mistralai/Mistral-7B-v0.3", 32768),
 }
 
-dataset_dict = {
-    "LogiQA": "EleutherAI/logiqa",
-}
-
-for dataset_name, dataset_hf_path in dataset_dict.items():
+for dataset_name in src.globals.MANY_SHOT_IN_CONTEXT_LEARNING_DATASET_ORDER:
     (
         questions,
         answers,
-    ) = src.scaling_utils.prepare_many_shot_in_context_scaling_dataset(
-        dataset_hf_path=dataset_hf_path,
+    ) = src.scaling_utils.prepare_many_shot_icl_dataset(
+        dataset_name=dataset_name,
     )
 
     for (
@@ -47,14 +44,22 @@ for dataset_name, dataset_hf_path in dataset_dict.items():
         (model_hf_path, max_context_length),
     ) in model_nicknames_to_huggingface_paths_dict.items():
         tokenizer = AutoTokenizer.from_pretrained(model_hf_path, trust_remote_code=True)
+
+        model_kwargs = {
+            "device_map": "auto",
+            "trust_remote_code": True,
+            "torch_dtype": torch.float32,
+        }
+        if "gemma" in model_hf_path:
+            model_kwargs["torch_dtype"] = torch.bfloat16
+            model_kwargs["attn_implementation"] = "eager"
+
         model = AutoModelForCausalLM.from_pretrained(
             model_hf_path,
-            device_map="auto",
-            trust_remote_code=True,
-            torch_dtype=torch.float32,
+            **model_kwargs,
         )
 
-        for shuffle_idx in range(5):
+        for shuffle_idx in range(15):
             # Permute questions and answers.
             random.seed(shuffle_idx)
             shuffled_data = list(zip(questions, answers))
@@ -63,7 +68,7 @@ for dataset_name, dataset_hf_path in dataset_dict.items():
 
             questions_and_answers = "\n".join(
                 [
-                    f"{question}\n{answer}\n"
+                    f"{question}\n{answer}\n\n"
                     for question, answer in zip(questions, answers)
                 ]
             )
@@ -91,6 +96,7 @@ for dataset_name, dataset_hf_path in dataset_dict.items():
                     torch.gather(log_probs, 2, labels.unsqueeze(-1))
                     .squeeze()
                     .cpu()
+                    .float()
                     .numpy()
                 )
 
@@ -98,7 +104,7 @@ for dataset_name, dataset_hf_path in dataset_dict.items():
                 encoded_questions_and_answers.input_ids[0].cpu().numpy().tolist()
             )
 
-            log_probs_df = src.scaling_utils.extract_log_probs_of_answers(
+            log_probs_df = src.scaling_utils.extract_log_probs_of_many_shot_icl_answers(
                 model_hf_path=model_hf_path,
                 questions_and_answers_token_ids=questions_and_answers_token_ids,
                 token_log_probs=token_log_probs,

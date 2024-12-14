@@ -438,6 +438,67 @@ def create_or_load_large_language_monkeys_original_pass_at_k_df(
     return large_language_monkeys_original_pass_at_k_df
 
 
+def create_or_load_many_shot_icl_probability_df(
+    raw_data_dir=f"{os.getcwd()}/data/raw_data",
+    processed_data_dir=f"{os.getcwd()}/data/processed_data",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    many_shot_icl_probability_df_path = os.path.join(
+        processed_data_dir, "many_shot_icl_probability.parquet"
+    )
+    if refresh or not os.path.exists(many_shot_icl_probability_df_path):
+        print(f"Creating {many_shot_icl_probability_df_path} anew...")
+        os.makedirs(processed_data_dir, exist_ok=True)
+        dfs_list = []
+        for parquet_filename in os.listdir(os.path.join(raw_data_dir, "many_shot_icl")):
+            if not parquet_filename.endswith(".parquet"):
+                continue
+            df = pd.read_parquet(
+                os.path.join(raw_data_dir, "many_shot_icl", parquet_filename)
+            )
+            dfs_list.append(df)
+
+        many_shot_icl_probability_df = pd.concat(dfs_list)
+
+        # # Create a unique token index from "Problem Idx" and "Seq Idx"
+        # many_shot_icl_probability_df["Token Idx"] = (
+        #     many_shot_icl_probability_df["Problem Idx"]
+        #     * many_shot_icl_probability_df["Seq Idx"].max()
+        #     + many_shot_icl_probability_df["Seq Idx"]
+        # )
+
+        many_shot_icl_probability_df.rename(
+            columns={
+                "log_probs": "Log Score",
+            },
+            inplace=True,
+        )
+        many_shot_icl_probability_df["Score"] = np.exp(
+            many_shot_icl_probability_df["Log Score"]
+        )
+        many_shot_icl_probability_df["Neg Log Score"] = -many_shot_icl_probability_df[
+            "Log Score"
+        ]
+
+        many_shot_icl_probability_df[
+            "Scaling Parameter"
+        ] = many_shot_icl_probability_df["Num. Shots"]
+
+        many_shot_icl_probability_df.to_parquet(
+            many_shot_icl_probability_df_path,
+            index=False,
+        )
+        print(f"Wrote {many_shot_icl_probability_df_path} to disk.")
+        del many_shot_icl_probability_df
+
+    many_shot_icl_probability_df = pd.read_parquet(many_shot_icl_probability_df_path)
+    print(
+        "Loaded many_shot_icl_probability_df_path with shape: ",
+        many_shot_icl_probability_df.shape,
+    )
+    return many_shot_icl_probability_df
+
+
 def create_or_load_pretraining_probability_df(
     raw_data_dir=f"{os.getcwd()}/data/raw_data",
     processed_data_dir=f"{os.getcwd()}/data/processed_data",

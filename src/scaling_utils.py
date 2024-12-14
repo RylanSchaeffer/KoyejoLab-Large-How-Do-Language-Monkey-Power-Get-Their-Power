@@ -9,15 +9,17 @@ from typing import Dict, List, Optional, Tuple
 MODEL_HF_PATH_TO_QUESTION_TOKENS = {
     "google/gemma-2-2b": [9413, 235292],
     "google/gemma-2-9b": [9413, 235292],
+    "meta-llama/Meta-Llama-3-8B": [],
 }
 
 MODEL_HF_PATH_TO_ANSWER_TOKENS = {
     "google/gemma-2-2b": [1261, 235292],
     "google/gemma-2-9b": [1261, 235292],
+    "meta-llama/Meta-Llama-3-8B": [],
 }
 
 
-def extract_log_probs_of_answers(
+def extract_log_probs_of_many_shot_icl_answers(
     model_hf_path: str,
     questions_and_answers_token_ids: List[int],
     token_log_probs: np.ndarray,
@@ -47,15 +49,15 @@ def extract_log_probs_of_answers(
     # Slice log probabilities of the answer tokens.
     log_probs_dict = {
         "log_probs": [],
-        "Problem Idx": [],
+        "Num. Shots": [],
         "Seq Idx": [],
     }
-    for problem_idx, (start_token_idx, end_token_idx_exclusive) in enumerate(
+    for num_shots, (start_token_idx, end_token_idx_exclusive) in enumerate(
         zip(answer_start_indices[:-1], question_start_indices[1:])
     ):
         token_log_probs_slice = token_log_probs[start_token_idx:end_token_idx_exclusive]
         log_probs_dict["log_probs"].extend(token_log_probs_slice.tolist())
-        log_probs_dict["Problem Idx"].extend([problem_idx] * len(token_log_probs_slice))
+        log_probs_dict["Num. Shots"].extend([num_shots] * len(token_log_probs_slice))
         log_probs_dict["Seq Idx"].extend(
             sequence_indices[start_token_idx:end_token_idx_exclusive]
         )
@@ -63,11 +65,18 @@ def extract_log_probs_of_answers(
     return log_probs_df
 
 
-def prepare_many_shot_in_context_scaling_dataset(
-    dataset_hf_path: str,
+def prepare_many_shot_icl_dataset(
+    dataset_name: str,
 ) -> Tuple[List[str], List[str]]:
-    if dataset_hf_path == "EleutherAI/logiqa":
-        ds = load_dataset(dataset_hf_path)["test"]
+    if dataset_name == "CommonsenseQA":
+        ds = load_dataset("tau/commonsense_qa", split="validation")
+        questions: List[str] = [f"Question: {question}" for question in ds["question"]]
+        answers: List[str] = [
+            f"Answer: {choices['text'][ord(answer) - ord('A')]}"
+            for choices, answer in zip(ds["choices"], ds["answerKey"])
+        ]
+    elif dataset_name == "LogiQA":
+        ds = load_dataset("EleutherAI/logiqa", split="test")
         questions: List[str] = [
             f"Question: {context}\n{query}"
             for context, query in zip(ds["context"], ds["question"])
@@ -76,16 +85,23 @@ def prepare_many_shot_in_context_scaling_dataset(
             f"Answer: {option[ord(label) - ord('a')]}"
             for option, label in zip(ds["options"], ds["label"])
         ]
-    # elif dataset_hf_path == "mrqa-workshop/mrqa" and dataset_name == "TriviaQA-web":
-    #     # ds = load_dataset(dataset_path)
-    #     # ds = ds.filter(lambda x: x["subset"] == dataset_name, num_proc=10)
-    #     # print()
-    #     raise NotImplementedError
-    # elif dataset_hf_path == "truthfulqa/truthful_qa" and dataset_name == "generation":
-    #     ds = load_dataset(dataset_hf_path, dataset_name)["validation"]
-    #     ds = ds.filter(lambda x: x["type"] == "Non-Adversarial", num_proc=10)
-    #     prompts: List[str] = ds["question"]
-    #     answers: List[str] = ds["best_answer"]
+    elif dataset_name == "TriviaQA":
+        ds = load_dataset("mrqa-workshop/mrqa", split="validation")
+        ds = ds.filter(lambda x: x["subset"] == "TriviaQA-web", num_proc=10)
+        questions: List[str] = [
+            f"Question: {context} {question}"
+            for context, question in zip(ds["context"], ds["question"])
+        ]
+        # Arbitrarily take the first answer.
+        answers: List[str] = [f"Answer: {answer[0]}" for answer in ds["answers"]]
+    elif dataset_name == "TruthfulQA":
+        ds = load_dataset("truthfulqa/truthful_qa", "generation")["validation"]
+        ds = ds.filter(lambda x: x["type"] == "Non-Adversarial", num_proc=10)
+        questions: List[str] = [f"Question: {question}" for question in ds["question"]]
+        answers: List[str] = [f"Answer: {answer}" for answer in ds["best_answer"]]
+    elif dataset_name == "WinoGrande":
+        # ds = load_dataset("winogrande/winogrande_qa", split="validation")
+        raise NotImplementedError("WinoGrande")
     else:
         raise NotImplementedError
 
