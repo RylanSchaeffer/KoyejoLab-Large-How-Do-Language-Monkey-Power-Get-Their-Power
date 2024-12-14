@@ -271,6 +271,7 @@ LARGE_LANGUAGE_MONKEYS_ORIGINAL_Ks_LIST = [
 
 MANY_SHOT_IN_CONTEXT_LEARNING_DATASET_ORDER = [
     "CommonsenseQA",
+    "CREAK",
     "LogiQA",
     "TriviaQA",
     "TruthfulQA",

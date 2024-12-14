@@ -6,16 +6,22 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from typing import Dict, List, Optional, Tuple
 
 
+# tokenizer("Question: ")
 MODEL_HF_PATH_TO_QUESTION_TOKENS = {
     "google/gemma-2-2b": [9413, 235292],
     "google/gemma-2-9b": [9413, 235292],
     "meta-llama/Meta-Llama-3-8B": [],
+    "Qwen/Qwen2-0.5B": [14582, 25],
+    "Qwen/Qwen2-1.5B": [14582, 25],
 }
 
+# tokenizer("Answer: ")
 MODEL_HF_PATH_TO_ANSWER_TOKENS = {
     "google/gemma-2-2b": [1261, 235292],
     "google/gemma-2-9b": [1261, 235292],
     "meta-llama/Meta-Llama-3-8B": [],
+    "Qwen/Qwen2-0.5B": [16141, 25],
+    "Qwen/Qwen2-1.5B": [16141, 25],
 }
 
 
@@ -70,19 +76,54 @@ def prepare_many_shot_icl_dataset(
 ) -> Tuple[List[str], List[str]]:
     if dataset_name == "CommonsenseQA":
         ds = load_dataset("tau/commonsense_qa", split="validation")
-        questions: List[str] = [f"Question: {question}" for question in ds["question"]]
+        choices_list: List[str] = [
+            "".join(
+                [
+                    f"{label}. {text}\n"
+                    for label, text in zip(choice["label"], choice["text"])
+                ]
+            )
+            for choice in ds["choices"]
+        ]
+        questions: List[str] = [
+            f"Question: {question}\nChoices:\n{choices}"
+            for (question, choices) in zip(ds["question"], choices_list)
+        ]
         answers: List[str] = [
-            f"Answer: {choices['text'][ord(answer) - ord('A')]}"
+            f"Answer: {answer}. {choices['text'][ord(answer) - ord('A')]}."
             for choices, answer in zip(ds["choices"], ds["answerKey"])
         ]
+    elif dataset_name == "CREAK":
+
+        def clean_up_question(question: str) -> str:
+            return question.split("Input: ")[-1].replace("\nOutput: \n\n", "")
+
+        ds = load_dataset(
+            "Lots-of-LoRAs/task403_creak_commonsense_inference", split="test"
+        )
+        questions: List[str] = [
+            f"Question: {clean_up_question(question)}" for question in ds["input"]
+        ]
+        answers = [f"Answer: {answer[0]}" for answer in ds["output"]]
     elif dataset_name == "LogiQA":
         ds = load_dataset("EleutherAI/logiqa", split="test")
+        choices_list: List[str] = [
+            "".join(
+                [
+                    f"{chr(ord('a') + option_idx)}. {option}\n"
+                    for option_idx, option in enumerate(options)
+                ]
+            )
+            for options in ds["options"]
+        ]
         questions: List[str] = [
-            f"Question: {context}\n{query}"
-            for context, query in zip(ds["context"], ds["question"])
+            f"Question: {context}\n{query}\nChoices:\n{choices}"
+            for context, query, choices in zip(
+                ds["context"], ds["question"], choices_list
+            )
         ]
         answers: List[str] = [
-            f"Answer: {option[ord(label) - ord('a')]}"
+            f"Answer: {label}. {option[ord(label) - ord('a')]}"
             for option, label in zip(ds["options"], ds["label"])
         ]
     elif dataset_name == "TriviaQA":
