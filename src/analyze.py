@@ -5,10 +5,53 @@ import itertools
 import numpy as np
 import os
 import pandas as pd
+import scipy.stats
 import pyarrow
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import src.globals
+
+
+def create_or_load_beta_distributions_pdf_df(
+    raw_data_dir=f"{os.getcwd()}/data/raw_data",
+    processed_data_dir=f"{os.getcwd()}/data/processed_data",
+    refresh: bool = False,
+):
+    beta_distributions_pdf_df_path = os.path.join(
+        processed_data_dir, "beta_distributions_pdf.parquet"
+    )
+
+    if refresh or not os.path.exists(beta_distributions_pdf_df_path):
+        alphas = [0.5, 1.0, 1.5]
+        betas = [1.5, 3, 10]
+
+        x = np.logspace(-10, 0, 500)
+        dfs_list = []
+        for alpha, beta in itertools.product(alphas, betas):
+            pdf = scipy.stats.beta.prob_pass_at_1(x, alpha, beta)
+            df = pd.DataFrame(
+                {
+                    "x": x,
+                    "p(x)": pdf,
+                    r"$\alpha$": np.full_like(x, fill_value=alpha),
+                    r"$\beta$": np.full_like(x, fill_value=beta),
+                }
+            )
+            dfs_list.append(df)
+        beta_distributions_pdf_df = pd.concat(dfs_list)
+        beta_distributions_pdf_df.to_parquet(
+            beta_distributions_pdf_df_path,
+            index=False,
+        )
+        print(f"Wrote {beta_distributions_pdf_df_path} to disk.")
+        del beta_distributions_pdf_df
+
+    beta_distributions_pdf_df = pd.read_parquet(beta_distributions_pdf_df_path)
+    print(
+        "Loaded beta_distributions_pdf_df with shape: ",
+        beta_distributions_pdf_df.shape,
+    )
+    return beta_distributions_pdf_df
 
 
 def create_or_load_bon_jailbreaking_pass_at_k_df(
@@ -436,6 +479,59 @@ def create_or_load_large_language_monkeys_original_pass_at_k_df(
         large_language_monkeys_original_pass_at_k_df.shape,
     )
     return large_language_monkeys_original_pass_at_k_df
+
+
+def create_or_load_large_language_monkeys_original_pass_at_1_beta_fits(
+    raw_data_dir=f"{os.getcwd()}/data/raw_data",
+    processed_data_dir=f"{os.getcwd()}/data/processed_data",
+    refresh: bool = False,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    # Load the original pass@k data on MATH.
+    llmonkeys_original_pass_at_k_df = (
+        src.analyze.create_or_load_large_language_monkeys_original_pass_at_k_df(
+            refresh=refresh,
+        )
+    )
+    # Keep only pass@1 data on MATH.
+    llmonkeys_original_pass_at_1_df = llmonkeys_original_pass_at_k_df[
+        (llmonkeys_original_pass_at_k_df["Scaling Parameter"] == 1)
+        & (llmonkeys_original_pass_at_k_df["Benchmark"] == "MATH")
+        & (llmonkeys_original_pass_at_k_df["Score"] > 1e-5)
+    ].copy()
+
+    large_language_monkeys_pass_at_1_beta_fits_df_path = os.path.join(
+        processed_data_dir, "llmonkeys_pass_at_1_beta_fits.parquet"
+    )
+    if refresh or not os.path.exists(
+        large_language_monkeys_pass_at_1_beta_fits_df_path
+    ):
+        print(f"Creating {large_language_monkeys_pass_at_1_beta_fits_df_path} anew...")
+
+        # For each model, fit a beta distribution to the pass@1 data using MLE.
+        llmonkeys_pass_at_1_beta_fits_df = (
+            llmonkeys_original_pass_at_1_df.groupby(
+                ["Model", "Benchmark", "Scaling Parameter"]
+            )
+            .apply(
+                lambda df: pd.Series(
+                    scipy.stats.beta.fit(df["Score"].values),
+                    index=["a", "b", "loc", "scale"],
+                )
+            )
+            .reset_index()
+        )
+
+        llmonkeys_pass_at_1_beta_fits_df.to_parquet(
+            large_language_monkeys_pass_at_1_beta_fits_df_path,
+            index=False,
+        )
+        del llmonkeys_pass_at_1_beta_fits_df
+
+    llmonkeys_pass_at_1_beta_fits_df = pd.read_parquet(
+        large_language_monkeys_pass_at_1_beta_fits_df_path
+    )
+
+    return llmonkeys_original_pass_at_1_df, llmonkeys_pass_at_1_beta_fits_df
 
 
 def create_or_load_many_shot_icl_probability_df(

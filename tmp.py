@@ -14,18 +14,14 @@ def main():
 
     # Define sets of parameters to plot
     param_sets = [
-        # {"alpha": 1e-5, "beta": 1},  # U-shaped
-        # {"alpha": 1e-3, "beta": 1},  # U-shaped
-        # {"alpha": 1e-1, "beta": 1},  # U-shaped
-        {"alpha": 1, "beta": 1},  # Uniform
-        {"alpha": 1, "beta": 3},  # Uniform
-        {"alpha": 1, "beta": 10},  # Uniform
+        {"alpha": 1, "beta": 1},
+        {"alpha": 1, "beta": 3},
+        {"alpha": 1, "beta": 10},
     ]
 
     # Create figure
     plt.close()
-    plt.figure(figsize=(12, 6))
-
+    plt.figure(figsize=(10, 6))
     # Create x values from 0 to 1
     x = np.logspace(-20, 0, 100)
 
@@ -35,7 +31,7 @@ def main():
         beta = params["beta"]
 
         # Calculate PDF values
-        pdf = stats.beta.pdf(x, alpha, beta)
+        pdf = stats.beta.prob_pass_at_1(x, alpha, beta)
 
         # Plot with label showing parameters
         label = f"α={alpha}, β={beta}"

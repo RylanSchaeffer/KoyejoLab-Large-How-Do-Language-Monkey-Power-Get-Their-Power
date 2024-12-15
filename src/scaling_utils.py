@@ -2,6 +2,7 @@ from datasets import load_dataset
 import numpy as np
 import pandas as pd
 import random
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from typing import Dict, List, Optional, Tuple
 
@@ -23,6 +24,61 @@ MODEL_HF_PATH_TO_ANSWER_TOKENS = {
     "Qwen/Qwen2-0.5B": [16141, 25],
     "Qwen/Qwen2-1.5B": [16141, 25],
 }
+
+
+class ManyShotLM(object):
+    def __init__(self, model_hf_path: str):
+        self.model_hf_path = model_hf_path
+        self.model_kwargs = {
+            "device_map": "auto",
+            "trust_remote_code": True,
+            "torch_dtype": torch.bfloat16,
+            "attn_implementation": "eager",
+        }
+        #
+        self.model = None
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_hf_path, trust_remote_code=True
+        )
+
+    def compute_tokens_log_probs(self, encoded_questions_and_answers) -> torch.Tensor:
+        # Get log probabilities for all encoded questions and answer.
+        with torch.no_grad():
+            input_ids = encoded_questions_and_answers.input_ids
+            labels = input_ids.clone()
+            labels = labels[:, 1:]  # Remove first position
+            output = self.model(**encoded_questions_and_answers)
+            logits = output.logits
+            logits = logits[:, :-1, :]
+            log_probs = torch.log_softmax(logits, dim=-1)
+            # Gather log probs for the actual tokens in the sequence.
+            # Shape: (sequence_length,)
+            tokens_log_probs = (
+                torch.gather(log_probs, 2, labels.unsqueeze(-1))
+                .squeeze()
+                .cpu()
+                .float()
+                .numpy()
+            )
+        return tokens_log_probs
+
+
+class GoogleGemma2(ManyShotLM):
+    def __init__(self, model_hf_path: str = "google/gemma-2-2b"):
+        super().__init__(model_hf_path=model_hf_path)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_hf_path,
+            **self.model_kwargs,
+        )
+
+
+class GoogleGemma2IT(ManyShotLM):
+    def __init__(self, model_hf_path: str = "google/gemma-2-2b-it"):
+        super().__init__(model_hf_path=model_hf_path)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_hf_path,
+            **self.model_kwargs,
+        )
 
 
 def extract_log_probs_of_many_shot_icl_answers(

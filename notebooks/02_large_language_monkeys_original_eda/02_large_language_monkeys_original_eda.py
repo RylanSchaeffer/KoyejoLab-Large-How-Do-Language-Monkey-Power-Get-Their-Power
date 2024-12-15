@@ -163,7 +163,7 @@ all_bins = np.concatenate(
 g = sns.displot(
     data=large_language_monkeys_original_pass_at_k_df[
         (large_language_monkeys_original_pass_at_k_df["Scaling Parameter"] == 1)
-        * (large_language_monkeys_original_pass_at_k_df["Benchmark"] == "MATH")
+        & (large_language_monkeys_original_pass_at_k_df["Benchmark"] == "MATH")
     ],
     kind="hist",
     x="Score",
@@ -189,6 +189,4 @@ src.plot.save_plot_with_multiple_extensions(
 )
 # plt.show()
 
-print(
-    "Finished notebooks/02_large_language_monkeys_original_eda/02_large_language_monkeys_original_eda.py!"
-)
+print("Finished notebooks/02_large_language_monkeys_original_eda.py!")

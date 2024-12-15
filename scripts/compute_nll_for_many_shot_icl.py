@@ -17,42 +17,50 @@ raw_data_dir = "data/raw_data/many_shot_icl"
 os.makedirs(raw_data_dir, exist_ok=True)
 
 model_nicknames_to_huggingface_paths_and_max_context_lengths_dict = {
-    # "Gemma 2 2B": ("google/gemma-2-2b", 8192),  # 8192
-    # "Gemma 2 9B": ("google/gemma-2-9b", 8192),
-    # "Llama 3 8B": ("meta-llama/Meta-Llama-3-8B", 8192),
-    "Mistral v0.3 7B": ("mistralai/Mistral-7B-v0.3", 8192),  # 32768
+    "Gemma 2 2B": (
+        src.scaling_utils.GoogleGemma2,
+        "google/gemma-2-2b",
+        4000,
+    ),  # 8192
+    "Gemma 2 2B IT": (
+        src.scaling_utils.GoogleGemma2IT,
+        "google/gemma-2-2b-it",
+        4000,
+    ),  # 8192
+    "Gemma 2 9B": (
+        src.scaling_utils.GoogleGemma2,
+        "google/gemma-2-9b",
+        4000,
+    ),
+    "Gemma 2 9B IT": (
+        src.scaling_utils.GoogleGemma2,
+        "google/gemma-2-9b-it",
+        4000,
+    ),
+    # "Llama 3 8B IT": ("meta-llama/Meta-Llama-3-8B-Instruct", 8192),
+    # "Mistral v0.3 7B": ("mistralai/Mistral-7B-v0.3", 8192),  # 32768
     # "OLMo-2 7B": ("allenai/OLMo-2-1124-7B", 4096),
     # "OLMo-2 13B": ("allenai/OLMo-2-1124-13B", 4096),
-    "Qwen 2.5 7B": ("Qwen/Qwen2.5-7B", 8192),  # 131072
-    "Qwen 2 0.5B": ("Qwen/Qwen2-0.5B", 8192),  # 131072
-    "Qwen 2 1.5B": ("Qwen/Qwen2-1.5B", 8192),  # 131072
+    # "Qwen 2.5 7B": ("Qwen/Qwen2.5-7B", 8192),  # 131072
+    # "Qwen 2 0.5B": ("Qwen/Qwen2-0.5B", 8192),  # 131072
+    # "Qwen 2 1.5B": ("Qwen/Qwen2-1.5B", 8192),  # 131072
 }
 
 dataset_names = [
-    "CommonsenseQA",
+    # "CommonsenseQA",
     "CREAK",
-    "LogiQA",
+    # "LogiQA",
     # "TriviaQA",
     # "TruthfulQA",
 ]
 
 for (
     model_nickname,
-    (model_hf_path, max_context_length),
+    (model_constructor, model_hf_path, max_context_length),
 ) in model_nicknames_to_huggingface_paths_and_max_context_lengths_dict.items():
-    model_kwargs = {
-        "device_map": "auto",
-        "trust_remote_code": True,
-        "torch_dtype": torch.bfloat16,
-        "attn_implementation": "eager",
-    }
-
-    model = AutoModelForCausalLM.from_pretrained(
-        model_hf_path,
-        **model_kwargs,
+    model = model_constructor(
+        model_hf_path=model_hf_path,
     )
-
-    tokenizer = AutoTokenizer.from_pretrained(model_hf_path, trust_remote_code=True)
 
     for dataset_name in dataset_names:
         (
@@ -87,24 +95,7 @@ for (
                 max_length=max_context_length,
             ).to(model.device)
 
-            # Get log probabilities for all encoded questions and answer.
-            with torch.no_grad():
-                input_ids = encoded_questions_and_answers.input_ids
-                labels = input_ids.clone()
-                labels = labels[:, 1:]  # Remove first position
-                output = model(**encoded_questions_and_answers)
-                logits = output.logits
-                logits = logits[:, :-1, :]
-                log_probs = torch.log_softmax(logits, dim=-1)
-                # Gather log probs for the actual tokens in the sequence.
-                # Shape: (sequence_length,)
-                token_log_probs = (
-                    torch.gather(log_probs, 2, labels.unsqueeze(-1))
-                    .squeeze()
-                    .cpu()
-                    .float()
-                    .numpy()
-                )
+            model.compute_tokens_log_probs
 
             questions_and_answers_token_ids: List[int] = (
                 encoded_questions_and_answers.input_ids[0].cpu().numpy().tolist()
