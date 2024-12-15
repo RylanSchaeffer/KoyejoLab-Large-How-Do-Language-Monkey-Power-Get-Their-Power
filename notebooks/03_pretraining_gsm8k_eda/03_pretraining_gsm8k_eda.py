@@ -18,7 +18,7 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
 )
 
 
-gpt4_gsm8k_prob_answer_given_problem_df = src.analyze.create_or_load_gpt4_gsm8k_prob_answer_given_problem_df(
+pretraining_gsm8k_prob_answer_given_problem_df = src.analyze.create_or_load_pretraining_gsm8k_prob_answer_given_problem_df(
     # refresh=False,
     refresh=True,
 )
@@ -26,7 +26,7 @@ gpt4_gsm8k_prob_answer_given_problem_df = src.analyze.create_or_load_gpt4_gsm8k_
 plt.close()
 plt.figure(figsize=(8, 6))
 g = sns.lineplot(
-    data=gpt4_gsm8k_prob_answer_given_problem_df,
+    data=pretraining_gsm8k_prob_answer_given_problem_df,
     x="Scaling Parameter",
     y="Score",
     hue="Model Family",
@@ -37,7 +37,7 @@ g.set(
     xlabel=r"Scaling Parameter (Pretraining FLOP)",
     yscale="log",
     ylabel=r"$\mathbb{E}[p(\text{Answer}|\text{Problem})$",
-    title="GSM8K (Pythia Models)",
+    title="Grade School Math 8K",
 )
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
@@ -47,7 +47,7 @@ src.plot.save_plot_with_multiple_extensions(
 
 plt.close()
 g = sns.relplot(
-    data=gpt4_gsm8k_prob_answer_given_problem_df,
+    data=pretraining_gsm8k_prob_answer_given_problem_df,
     kind="line",
     x="Scaling Parameter",
     y="Neg Log Score",
@@ -68,16 +68,16 @@ g.set(
 )
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))  # You might need to adjust these values
-g.fig.suptitle("GSM8K (Pythia Models)")
+g.fig.suptitle("Grade School Math 8K")
 g.fig.subplots_adjust(top=0.9)
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
     plot_filename="y=neg_log_score_vs_x=scaling_parameter_hue=model_family_col=model_family_units=problem_idx",
 )
-plt.show()
+# plt.show()
 
 gpt4_gsm8k_avg_prob_answer_given_problem_df = (
-    gpt4_gsm8k_prob_answer_given_problem_df.groupby(
+    pretraining_gsm8k_prob_answer_given_problem_df.groupby(
         ["Model", "Model Family", "Scaling Parameter"]
     )["Score"]
     .mean()
@@ -101,12 +101,12 @@ g.set(
     xlabel=r"Scaling Parameter (Pretraining FLOP)",
     yscale="log",
     ylabel=r"$- \log \mathbb{E}[p(\text{Answer}|\text{Problem})$",
-    title="GSM8K (Pythia Models)",
+    title="Grade School Math 8K",
 )
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
     plot_filename="y=neg_log_score_vs_x=scaling_parameter_hue=model_family",
 )
-plt.show()
+# plt.show()
 
-print("Finished notebooks/03_gpt4_gsm8k_eda/03_gpt4_gsm8k_eda.py!")
+print("Finished notebooks/03_pretraining_gsm8k_eda!")
