@@ -253,4 +253,6 @@ src.plot.save_plot_with_multiple_extensions(
 # plt.show()
 
 
-print("Finished notebooks/04_pretraining_scaling_eda/04_pretraining_scaling_eda.py!")
+print(
+    "Finished notebooks/04_pretraining_causal_language_modeling_eda/04_pretraining_causal_language_modeling_eda.py!"
+)

@@ -205,7 +205,7 @@ def prepare_many_shot_icl_dataset(
     return questions, answers
 
 
-def prepare_pretraining_scaling_dataset(
+def prepare_pretraining_causal_language_modeling_dataset(
     dataset_hf_path: str,
     **kwargs,
 ) -> List[str]:

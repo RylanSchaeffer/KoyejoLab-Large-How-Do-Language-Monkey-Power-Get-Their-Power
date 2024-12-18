@@ -33,7 +33,7 @@ g = sns.lineplot(
 )
 g.set(
     title="Best-of-N Jailbreaking",
-    xlabel=r"Scaling Parameter (Num. Attempts $N$)",
+    xlabel=r"Scaling Parameter (Num. Attempts $k$)",
     ylabel="Attack Success Rate",
     ylim=(-0.05, 1.05),
 )
@@ -69,8 +69,8 @@ g.set(
     xscale="log",
     yscale="log",
     ylim=(1e-3, None),
-    xlabel=r"Scaling Parameter (Num. Attempts $N$)",
-    ylabel=r"$-\log (\mathbb{E}[\text{Attack Success Rate}])$",
+    xlabel=r"Scaling Parameter (Num. Attempts $k$)",
+    ylabel=r"$-\log (\mathbb{E}[\text{ASR@k}])$",
 )
 sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
 src.plot.save_plot_with_multiple_extensions(
@@ -96,8 +96,8 @@ g = sns.relplot(
 )
 g.set(
     xscale="log",
-    ylabel="Attack Success Rate",
-    xlabel=r"Scaling Parameter (Num. Attempts $N$)",
+    ylabel="ASR@k",
+    xlabel=r"Scaling Parameter (Num. Attempts $k$)",
 )
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))
@@ -128,8 +128,8 @@ g.set(
     xscale="log",
     yscale="log",
     ylim=(1e-2, 1e1),
-    ylabel=r"$-\log(\text{Attack Success Rate})$",
-    xlabel=r"Scaling Parameter (Num. Attempts $N$)",
+    ylabel=r"$-\log(\text{ASR@k})$",
+    xlabel=r"Scaling Parameter (Num. Attempts $k$)",
 )
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))
@@ -173,7 +173,7 @@ g = sns.displot(
 g.set(
     xscale="log",
     ylabel="Count",
-    xlabel=r"Attack Success Rate at $N=1$",
+    xlabel=r"$\operatorname{ASR@1}$",
 )
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))

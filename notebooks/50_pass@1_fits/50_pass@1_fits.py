@@ -18,12 +18,32 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
     refresh=False,
 )
 
+# # Load the original pass@k data on MATH.
+# llmonkeys_original_pass_at_k_df = (
+#     src.analyze.create_or_load_large_language_monkeys_original_pass_at_k_df(
+#         refresh=False,
+#     )
+# )
+#
+# tmp_df = llmonkeys_original_pass_at_k_df[
+#     (llmonkeys_original_pass_at_k_df["Scaling Parameter"] == 1)
+#     & (llmonkeys_original_pass_at_k_df["Benchmark"] == "MATH")
+# ].copy()
+#
+# print()
+#
+# plt.close()
+# sns.histplot(data=tmp_df, x="Score")
+# plt.xscale("log")
+# plt.yscale("log")
+# plt.show()
+
 (
     llmonkeys_original_pass_at_1_df,
     llmonkeys_pass_at_1_beta_fits_df,
 ) = src.analyze.create_or_load_large_language_monkeys_original_pass_at_1_beta_fits(
-    refresh=False,
-    # refresh=True,
+    # refresh=False,
+    refresh=True,
 )
 
 # Create better bins that handle zero and near-zero values
@@ -76,6 +96,7 @@ for ax_idx, model_name in enumerate(
 g.set(
     xscale="log",
     ylabel="Count",
+    ylim=(0, 128),
     xlabel="pass@1",
 )
 # Move legend to the empty subplot position

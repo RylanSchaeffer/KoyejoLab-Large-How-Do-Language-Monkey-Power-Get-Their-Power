@@ -28,7 +28,7 @@ def create_or_load_beta_distributions_pdf_df(
         x = np.logspace(-10, 0, 500)
         dfs_list = []
         for alpha, beta in itertools.product(alphas, betas):
-            pdf = scipy.stats.beta.prob_pass_at_1(x, alpha, beta)
+            pdf = scipy.stats.beta.pdf(x, alpha, beta)
             df = pd.DataFrame(
                 {
                     "x": x,
@@ -406,7 +406,7 @@ def create_or_load_large_language_monkeys_original_pass_at_1_beta_fits(
     llmonkeys_original_pass_at_1_df = llmonkeys_original_pass_at_k_df[
         (llmonkeys_original_pass_at_k_df["Scaling Parameter"] == 1)
         & (llmonkeys_original_pass_at_k_df["Benchmark"] == "MATH")
-        & (llmonkeys_original_pass_at_k_df["Score"] > 1e-5)
+        # & (llmonkeys_original_pass_at_k_df["Score"] > 1e-5)
     ].copy()
 
     large_language_monkeys_pass_at_1_beta_fits_df_path = os.path.join(
@@ -417,14 +417,25 @@ def create_or_load_large_language_monkeys_original_pass_at_1_beta_fits(
     ):
         print(f"Creating {large_language_monkeys_pass_at_1_beta_fits_df_path} anew...")
 
+        llmonkeys_original_pass_at_1_copy_df = llmonkeys_original_pass_at_1_df.copy()
+        # llmonkeys_original_pass_at_1_copy_df = llmonkeys_original_pass_at_1_copy_df[
+        #     llmonkeys_original_pass_at_1_copy_df["Score"] > 0.0
+        # ].copy()
+        # Slightly inflate the zero values for fitting.
+        llmonkeys_original_pass_at_1_copy_df["Score"][
+            llmonkeys_original_pass_at_1_copy_df["Score"] == 0.0
+        ] += 1e-8
+
         # For each model, fit a beta distribution to the pass@1 data using MLE.
         llmonkeys_pass_at_1_beta_fits_df = (
-            llmonkeys_original_pass_at_1_df.groupby(
+            llmonkeys_original_pass_at_1_copy_df.groupby(
                 ["Model", "Benchmark", "Scaling Parameter"]
             )
             .apply(
                 lambda df: pd.Series(
-                    scipy.stats.beta.fit(df["Score"].values),
+                    scipy.stats.beta.fit(
+                        df["Score"].values, floc=0.0, fscale=1.01 * df["Score"].max()
+                    ),
                     index=["a", "b", "loc", "scale"],
                 )
             )
@@ -505,24 +516,29 @@ def create_or_load_many_shot_icl_probability_df(
     return many_shot_icl_probability_df
 
 
-def create_or_load_pretraining_gsm8k_prob_answer_given_problem_df(
+def create_or_load_pretraining_math_prob_answer_given_problem_df(
     raw_data_dir=f"{os.getcwd()}/data/raw_data",
     processed_data_dir=f"{os.getcwd()}/data/processed_data",
     refresh: bool = False,
 ) -> pd.DataFrame:
     pretraining_gsm8k_neg_log_likelihood_df_path = os.path.join(
-        processed_data_dir, "pretraining_gsm8k_neg_log_likelihood.parquet"
+        processed_data_dir, "pretraining_math_neg_log_likelihood.parquet"
     )
 
     if refresh or not os.path.exists(pretraining_gsm8k_neg_log_likelihood_df_path):
-        print("Creating pretraining_gsm8k_neg_log_likelihood_df_path anew...")
+        print("Creating pretraining_math_neg_log_likelihood_df_path anew...")
 
         os.makedirs(processed_data_dir, exist_ok=True)
-        pretraining_gsm8k_neg_log_likelihood_df = pd.read_csv(
+        pretraining_gsm8k_log_likelihood_df = pd.read_csv(
             os.path.join(
-                raw_data_dir, "pretraining_gsm8k", "pythia_gsm8k_log_likelihoods.csv"
+                raw_data_dir, "pretraining_math", "pythia_gsm8k_log_likelihoods.csv"
             )
         )
+        # pretraining_math_log_likelihood_df = pd.read_csv(
+        #     os.path.join(
+        #         raw_data_dir, "pretraining_math", "pythia_math_log_likelihoods.csv"
+        #     )
+        # )
         model_nicknames_to_keep = [
             "Pythia_14M_20B",
             "Pythia_70M_60B",
@@ -534,24 +550,23 @@ def create_or_load_pretraining_gsm8k_prob_answer_given_problem_df(
             "Pythia_6.9B_300B",
             "Pythia_12B_300B",
         ]
-        pretraining_gsm8k_neg_log_likelihood_df = (
-            pretraining_gsm8k_neg_log_likelihood_df[
-                pretraining_gsm8k_neg_log_likelihood_df["Model Nickname"].isin(
-                    model_nicknames_to_keep
-                )
-            ]
-        )
+        pretraining_gsm8k_log_likelihood_df = pretraining_gsm8k_log_likelihood_df[
+            pretraining_gsm8k_log_likelihood_df["Model Nickname"].isin(
+                model_nicknames_to_keep
+            )
+        ]
+        pretraining_gsm8k_log_likelihood_df["Dataset"] = "GSM8K"
 
         pretraining_gsm8k_summed_neg_log_likelihood_df = (
-            pretraining_gsm8k_neg_log_likelihood_df.groupby(
-                ["Model Nickname", "prompt_idx"]
+            pretraining_gsm8k_log_likelihood_df.groupby(
+                ["Model Nickname", "Dataset", "prompt_idx"]
             )["Neg Log Likelihood"]
             .sum()
             .reset_index()
         )
 
         models_metadata_df = pd.read_csv(
-            os.path.join(raw_data_dir, "pretraining_gsm8k", "models_pythia.csv")
+            os.path.join(raw_data_dir, "pretraining_math", "models_pythia.csv")
         )
         models_metadata_df["Pretraining Compute"] = (
             6.0 * models_metadata_df["Tokens"] * models_metadata_df["Parameters"]
@@ -566,12 +581,14 @@ def create_or_load_pretraining_gsm8k_prob_answer_given_problem_df(
                 on="Model Nickname",
             )
         )
-        pretraining_gsm8k_summed_neg_log_likelihood_df["Score"] = np.exp(
-            -pretraining_gsm8k_summed_neg_log_likelihood_df["Neg Log Likelihood"]
-        )
         pretraining_gsm8k_summed_neg_log_likelihood_df[
             "Log Score"
         ] = -pretraining_gsm8k_summed_neg_log_likelihood_df["Neg Log Likelihood"]
+
+        pretraining_gsm8k_summed_neg_log_likelihood_df["Score"] = np.exp(
+            pretraining_gsm8k_summed_neg_log_likelihood_df["Log Score"]
+        )
+
         pretraining_gsm8k_summed_neg_log_likelihood_df.rename(
             columns={
                 "Neg Log Likelihood": "Neg Log Score",
@@ -588,15 +605,15 @@ def create_or_load_pretraining_gsm8k_prob_answer_given_problem_df(
         )
         del pretraining_gsm8k_summed_neg_log_likelihood_df
 
-    pretraining_gsm8k_neg_log_likelihood_df = pd.read_parquet(
+    pretraining_gsm8k_log_likelihood_df = pd.read_parquet(
         pretraining_gsm8k_neg_log_likelihood_df_path
     )
     print(
         "Loaded pretraining_gsm8k_neg_log_likelihood_df_path with shape: ",
-        pretraining_gsm8k_neg_log_likelihood_df.shape,
+        pretraining_gsm8k_log_likelihood_df.shape,
     )
 
-    return pretraining_gsm8k_neg_log_likelihood_df
+    return pretraining_gsm8k_log_likelihood_df
 
 
 def create_or_load_pretraining_probability_df(
@@ -612,12 +629,16 @@ def create_or_load_pretraining_probability_df(
         os.makedirs(processed_data_dir, exist_ok=True)
         dfs_list = []
         for parquet_filename in os.listdir(
-            os.path.join(raw_data_dir, "pretraining_scaling")
+            os.path.join(raw_data_dir, "pretraining_causal_language_modeling")
         ):
             if not parquet_filename.endswith(".parquet"):
                 continue
             df = pd.read_parquet(
-                os.path.join(raw_data_dir, "pretraining_scaling", parquet_filename)
+                os.path.join(
+                    raw_data_dir,
+                    "pretraining_causal_language_modeling",
+                    parquet_filename,
+                )
             )
             dfs_list.append(df)
 
@@ -644,7 +665,9 @@ def create_or_load_pretraining_probability_df(
         ]
 
         models_metadata_df = pd.read_csv(
-            os.path.join(raw_data_dir, "pretraining_scaling", "models.csv")
+            os.path.join(
+                raw_data_dir, "pretraining_causal_language_modeling", "models.csv"
+            )
         )
         models_metadata_df["Scaling Parameter"] = (
             6.0 * models_metadata_df["Tokens"] * models_metadata_df["Parameters"]

@@ -37,7 +37,7 @@ g.set(
     title="Large Language Monkeys",
     xscale="log",
     xlabel=r"Scaling Parameter (Num. Attempts $k$)",
-    ylabel=r"$\mathbb{E}[\text{Coverage}]$",
+    ylabel=r"$\mathbb{E}[\operatorname{pass@k}]$",
     ylim=(0.0, 1.0),
 )
 sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
@@ -75,7 +75,7 @@ g.set(
     yscale="log",
     ylim=(1e-1, None),
     xlabel=r"Scaling Parameter (Num. Attempts $k$)",
-    ylabel=r"$-\log (\mathbb{E}[\text{Coverage}])$",
+    ylabel=r"$-\log (\mathbb{E}[\operatorname{pass@k}])$",
 )
 sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
 src.plot.save_plot_with_multiple_extensions(
@@ -100,7 +100,7 @@ g = sns.relplot(
 )
 g.set(
     xscale="log",
-    ylabel=r"$\mathbb{E}[\text{Coverage}]$",
+    ylabel=r"$\mathbb{E}[\operatorname{pass@k}]$",
     xlabel=r"Scaling Parameter (Num. Attempts $k$)",
 )
 # Move legend to the empty subplot position
@@ -132,7 +132,7 @@ g.set(
     xscale="log",
     yscale="log",
     ylim=(1e-2, 1e1),
-    ylabel=r"$-\log(\mathbb{E}[\text{Coverage}])$",
+    ylabel=r"$-\log(\mathbb{E}[\operatorname{pass@k}])$",
     xlabel=r"Scaling Parameter (Num. Attempts $k$)",
 )
 # Move legend to the empty subplot position

@@ -11,7 +11,7 @@ from typing import Dict, List
 import src.scaling_utils
 
 
-raw_data_dir = "data/raw_data/pretraining_scaling"
+raw_data_dir = "data/raw_data/pretraining_causal_language_modeling"
 os.makedirs(raw_data_dir, exist_ok=True)
 
 max_context_length = 2048
@@ -37,7 +37,9 @@ dataset_dict = {
 
 for dataset_name, dataset_hf_path in dataset_dict.items():
     try:
-        sequences: List[str] = src.scaling_utils.prepare_pretraining_scaling_dataset(
+        sequences: List[
+            str
+        ] = src.scaling_utils.prepare_pretraining_causal_language_modeling_dataset(
             dataset_hf_path=dataset_hf_path,
         )
     except Exception as e:
