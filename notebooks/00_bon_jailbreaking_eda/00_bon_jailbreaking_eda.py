@@ -90,7 +90,7 @@ g.set(
     xscale="log",
     yscale="log",
     ylim=(3e-2, 8e0),
-    xlabel=r"Scaling Parameter (Num. Attempts $k$)",
+    xlabel=r"Num. Attempts per Prompt $k$",
     ylabel=r"$-\log (\mathbb{E}[\text{ASR@k}])$",
 )
 sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))

@@ -94,7 +94,7 @@ g.set(
     xscale="log",
     yscale="log",
     ylim=(1e-1, None),
-    xlabel=r"Scaling Parameter (Num. Attempts $k$)",
+    xlabel=r"Num. Attempts per Problem $k$",
     ylabel=r"$-\log (\mathbb{E}[\operatorname{pass@k}])$",
 )
 sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
