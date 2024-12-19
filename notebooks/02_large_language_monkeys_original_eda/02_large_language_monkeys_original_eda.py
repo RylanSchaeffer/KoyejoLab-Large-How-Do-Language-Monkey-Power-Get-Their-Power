@@ -58,6 +58,17 @@ large_language_monkeys_original_neg_log_avg_pass_at_k_df["Neg Log Score"] = -np.
     large_language_monkeys_original_neg_log_avg_pass_at_k_df["Score"]
 )
 
+(
+    large_language_monkeys_original_neg_log_avg_pass_at_k_df,
+    fitted_power_law_parameters_df,
+) = src.analyze.fit_power_law(
+    large_language_monkeys_original_neg_log_avg_pass_at_k_df,
+    covariate_col="Scaling Parameter",
+    target_col="Neg Log Score",
+    groupby_cols=["Model", "Benchmark"],
+)
+
+print("Fitted Power Laws Parameters: ", fitted_power_law_parameters_df)
 
 plt.close()
 plt.figure(figsize=(10, 6))
@@ -68,6 +79,15 @@ g = sns.lineplot(
     hue="Model",
     hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
     style="Benchmark",
+)
+g = sns.lineplot(
+    data=large_language_monkeys_original_neg_log_avg_pass_at_k_df,
+    x="Scaling Parameter",
+    y="Predicted Neg Log Score",
+    hue="Model",
+    hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
+    legend=False,
+    linestyle="--",
 )
 g.set(
     title="Large Language Monkeys",
@@ -80,7 +100,7 @@ g.set(
 sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
-    plot_filename="y=neg_log_score_vs_x=scaling_parameter_hue=model",
+    plot_filename="y=neg_log_avg_score_vs_x=scaling_parameter_hue=model",
 )
 # plt.show()
 

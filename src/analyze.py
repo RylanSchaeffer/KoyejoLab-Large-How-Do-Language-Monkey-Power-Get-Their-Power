@@ -5,8 +5,8 @@ import itertools
 import numpy as np
 import os
 import pandas as pd
+from scipy.optimize import minimize
 import scipy.stats
-import pyarrow
 from typing import Dict, List, Optional, Tuple, Union
 
 import src.globals
@@ -725,3 +725,92 @@ def estimate_pass_at_k(
         [estimator(n, c, k) for n, c in zip(num_samples_total, num_samples_correct)]
     )
     return pass_at_k
+
+
+def fit_power_law(
+    df: pd.DataFrame,
+    covariate_col: str,
+    target_col: str,
+    groupby_cols: List[str],
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Fits a power law relationship between covariate and target columns within each group.
+    The relationship is of the form: log(target) = a * log(covariate) + b
+    which implies: target = exp(b) * covariate^a
+
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        Input dataframe containing the data
+    covariate_col : str
+        Name of the column containing the independent variable
+    target_col : str
+        Name of the column containing the dependent variable
+    groupby_cols : List[str]
+        List of column names to group by before fitting
+
+    Returns:
+    --------
+    pd.Series
+        Multi-indexed Series containing the fitted parameters 'a' and 'b' for each group
+    """
+
+    def objective_function(params, x, y):
+        """Calculate sum of squared errors for current parameters"""
+        a, b = params
+        predicted = -a * x + b
+        return np.sum((y - predicted) ** 2)
+
+    def fit_group(group_df):
+        # Log transform the data
+        log_x = np.log(group_df[covariate_col])
+        log_y = np.log(group_df[target_col])
+
+        # Initial guess using linear regression
+        x_mean = log_x.mean()
+        y_mean = log_y.mean()
+        a_init = np.sum((log_x - x_mean) * (log_y - y_mean)) / np.sum(
+            (log_x - x_mean) ** 2
+        )
+        b_init = y_mean - a_init * x_mean
+
+        # Optimize parameters
+        result = minimize(
+            objective_function,
+            x0=[a_init, b_init],
+            args=(log_x, log_y),
+            method="Nelder-Mead",
+        )
+
+        return pd.Series(
+            {
+                "a": result.x[0],  # power law exponent
+                "b": result.x[1],  # log of scaling factor
+            }
+        )
+
+    # Group the data and apply the fitting function
+    fitted_power_law_parameters_df = df.groupby(groupby_cols).apply(fit_group)
+
+    # Create a copy of the input dataframe to store predictions
+    df_with_predictions = df.copy()
+
+    # Calculate predicted values for each group
+    for group_idx, params in fitted_power_law_parameters_df.iterrows():
+        # Convert group_idx to tuple if it's a single value
+        group_idx = (group_idx,) if not isinstance(group_idx, tuple) else group_idx
+
+        # Create boolean mask for the current group
+        mask = True
+        for col, val in zip(groupby_cols, group_idx):
+            mask = mask & (df_with_predictions[col] == val)
+
+        # Calculate predictions using the power law relationship
+        a, b = params["a"], params["b"]
+        x_values = df_with_predictions.loc[mask, covariate_col]
+        predicted_values = np.exp(b) * np.power(x_values, -a)
+
+        # Add predictions to the dataframe
+        df_with_predictions.loc[mask, f"Predicted {target_col}"] = predicted_values
+
+    return df_with_predictions, fitted_power_law_parameters_df

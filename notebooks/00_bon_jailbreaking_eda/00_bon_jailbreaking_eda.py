@@ -55,6 +55,18 @@ bon_jailbreaking_neg_log_avg_pass_at_k_df["Neg Log Score"] = -np.log(
     bon_jailbreaking_neg_log_avg_pass_at_k_df["Score"]
 )
 
+(
+    bon_jailbreaking_neg_log_avg_pass_at_k_df,
+    fitted_power_law_parameters_df,
+) = src.analyze.fit_power_law(
+    bon_jailbreaking_neg_log_avg_pass_at_k_df,
+    covariate_col="Scaling Parameter",
+    target_col="Neg Log Score",
+    groupby_cols=["Model", "Modality"],
+)
+
+print("Fitted Power Laws Parameters: ", fitted_power_law_parameters_df)
+
 plt.close()
 plt.figure(figsize=(10, 6))
 g = sns.lineplot(
@@ -64,18 +76,27 @@ g = sns.lineplot(
     hue="Model",
     style="Modality",
 )
+g = sns.lineplot(
+    data=bon_jailbreaking_neg_log_avg_pass_at_k_df,
+    x="Scaling Parameter",
+    y="Predicted Neg Log Score",
+    hue="Model",
+    # style="Modality",
+    legend=False,
+    linestyle="--",
+)
 g.set(
     title="Best-of-N Jailbreaking",
     xscale="log",
     yscale="log",
-    ylim=(1e-3, None),
+    ylim=(3e-2, 8e0),
     xlabel=r"Scaling Parameter (Num. Attempts $k$)",
     ylabel=r"$-\log (\mathbb{E}[\text{ASR@k}])$",
 )
 sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
-    plot_filename="y=neg_log_score_vs_x=scaling_parameter_hue=model",
+    plot_filename="y=neg_log_avg_score_vs_x=scaling_parameter_hue=model",
 )
 # plt.show()
 
