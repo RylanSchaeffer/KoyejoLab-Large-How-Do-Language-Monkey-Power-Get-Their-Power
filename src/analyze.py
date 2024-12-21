@@ -12,6 +12,41 @@ from typing import Dict, List, Optional, Tuple, Union
 import src.globals
 
 
+def compute_discretized_neg_log_likelihood_beta_distribution(
+    params: Tuple[float, float],
+    data: np.ndarray,
+    bins: np.ndarray,
+    epsilon: float = 1e-16,
+):
+    a, b = params
+    assert not np.isnan(a)
+    assert not np.isnan(b)
+
+    # 1. Compute probability mass per bin
+    cdf_values = scipy.stats.beta.cdf(bins, a, b, loc=0.0, scale=data.max())
+    prob_mass = np.diff(cdf_values) + epsilon
+
+    assert np.all(prob_mass >= 0.0)
+    log_prob_mass = np.log(prob_mass)
+
+    # 2. Bin the data
+    num_data_per_bin = np.histogram(data, bins)[0]
+
+    # 3. Compute the total log likelihood
+    log_likelihood = np.mean(np.multiply(num_data_per_bin, log_prob_mass))
+
+    # 4. Return the negative log likelihood.
+    neg_log_likelihood = -log_likelihood
+
+    # print("alpha: ", a)
+    # print("beta: ", b)
+    # print("NLL: ", neg_log_likelihood)
+    # print("\n\n")
+    assert not np.isinf(neg_log_likelihood)
+
+    return neg_log_likelihood
+
+
 def create_or_load_beta_distributions_pdf_df(
     raw_data_dir=f"{os.getcwd()}/data/raw_data",
     processed_data_dir=f"{os.getcwd()}/data/processed_data",
@@ -725,6 +760,55 @@ def estimate_pass_at_k(
         [estimator(n, c, k) for n, c in zip(num_samples_total, num_samples_correct)]
     )
     return pass_at_k
+
+
+def fit_pass_at_1_beta_distribution_parameters(
+    data: np.ndarray,
+    resolution: float = 1e-4,
+    initial_params: Tuple[float, float] = (0.9, 5.1),
+    bounds: Tuple[Tuple[float, float]] = ((0.01, 100), (0.01, 100)),
+    num_windows_per_factor_of_10: int = 10,
+) -> pd.Series:
+    smallest_nonzero_pass_at_1 = resolution
+    log10_smallest_nonzero_pass_at_1 = np.log10(smallest_nonzero_pass_at_1)
+    log_bins = np.logspace(
+        log10_smallest_nonzero_pass_at_1,
+        0,
+        -int(log10_smallest_nonzero_pass_at_1) * num_windows_per_factor_of_10 + 1,
+    )
+    small_value_for_plotting = smallest_nonzero_pass_at_1 / 2.0
+    bins = np.concatenate(
+        [[-small_value_for_plotting], [small_value_for_plotting], log_bins]
+    )
+    bins[0] = 0.0
+    assert data.min() >= bins[0]
+    assert data.max() < bins[-1]
+
+    # Maximize the log likelihood by minimizing its negative
+    optimize_result = scipy.optimize.minimize(
+        lambda params: compute_discretized_neg_log_likelihood_beta_distribution(
+            params, data=data, bins=bins
+        ),
+        x0=initial_params,
+        bounds=bounds,
+        method="L-BFGS-B",
+        options=dict(
+            maxiter=5000,
+            maxls=100,
+            gtol=1e-6,  # Gradient tolerance, adjust as needed),
+        ),
+    )
+
+    result = pd.Series(
+        {
+            "a": optimize_result.x[0],
+            "b": optimize_result.x[1],
+            "loc": 0.0,
+            "scale": data.max(),
+        }
+    )
+
+    return result
 
 
 def fit_power_law(

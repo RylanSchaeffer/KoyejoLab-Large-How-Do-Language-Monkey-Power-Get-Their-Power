@@ -36,7 +36,7 @@ g = sns.lineplot(
 g.set(
     title="Large Language Monkeys",
     xscale="log",
-    xlabel=r"Scaling Parameter (Num. Attempts $k$)",
+    xlabel=r"Num. Attempts per Problem $k$",
     ylabel=r"$\mathbb{E}[\operatorname{pass@k}]$",
     ylim=(0.0, 1.0),
 )
@@ -121,7 +121,7 @@ g = sns.relplot(
 g.set(
     xscale="log",
     ylabel=r"$\mathbb{E}[\operatorname{pass@k}]$",
-    xlabel=r"Scaling Parameter (Num. Attempts $k$)",
+    xlabel=r"Num. Attempts per Problem $k$",
 )
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))  # You might need to adjust these values
@@ -152,8 +152,8 @@ g.set(
     xscale="log",
     yscale="log",
     ylim=(1e-2, 1e1),
-    ylabel=r"$-\log(\mathbb{E}[\operatorname{pass@k}])$",
-    xlabel=r"Scaling Parameter (Num. Attempts $k$)",
+    ylabel=r"$-\log(\operatorname{pass@k})$",
+    xlabel=r"Num. Attempts per Problem $k$",
 )
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))  # You might need to adjust these values

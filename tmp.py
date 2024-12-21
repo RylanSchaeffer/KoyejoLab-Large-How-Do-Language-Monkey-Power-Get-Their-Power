@@ -1,54 +1,90 @@
-import numpy as np
 import matplotlib.pyplot as plt
-from scipy import stats
+import numpy as np
+from pprint import pprint
+import scipy.stats
+import numpy as np
+import scipy.stats
+import scipy.integrate
+import scipy.optimize
+from typing import Tuple
 
 
-def main():
-    """
-    Plot Beta distribution PDFs for various alpha, beta parameters
+def compute_neg_log_likelihood(
+    params: Tuple[float, float],
+    data: np.ndarray,
+    bins: np.ndarray,
+    epsilon: float = 1e-16,
+):
+    a, b = params
+    assert not np.isnan(a)
+    assert not np.isnan(b)
 
-    Args:
-        param_sets: List of dictionaries with 'alpha', 'beta' values
-        num_points: Number of points to plot for each distribution
-    """
+    # 1. Compute probability mass per bin
+    cdf_values = scipy.stats.beta.cdf(bins, a, b, loc=0.0, scale=data.max())
+    prob_mass = np.diff(cdf_values) + epsilon
 
-    # Define sets of parameters to plot
-    param_sets = [
-        {"alpha": 1, "beta": 1},
-        {"alpha": 1, "beta": 3},
-        {"alpha": 1, "beta": 10},
-    ]
+    assert np.all(prob_mass >= 0.0)
+    log_prob_mass = np.log(prob_mass)
 
-    # Create figure
-    plt.close()
-    plt.figure(figsize=(10, 6))
-    # Create x values from 0 to 1
-    x = np.logspace(-20, 0, 100)
+    # 2. Bin the data
+    num_data_per_bin = np.histogram(data, bins)[0]
 
-    # Plot each distribution
-    for params in param_sets:
-        alpha = params["alpha"]
-        beta = params["beta"]
+    # 3. Compute the total log likelihood
+    log_likelihood = np.mean(np.multiply(num_data_per_bin, log_prob_mass))
 
-        # Calculate PDF values
-        pdf = stats.beta.prob_pass_at_1(x, alpha, beta)
+    # 4. Return the negative log likelihood.
+    neg_log_likelihood = -log_likelihood
 
-        # Plot with label showing parameters
-        label = f"α={alpha}, β={beta}"
-        plt.plot(x, pdf, label=label)
+    print("alpha: ", a)
+    print("beta: ", b)
+    print("NLL: ", neg_log_likelihood)
+    print("\n\n")
+    assert not np.isinf(neg_log_likelihood)
 
-    # Customize plot
-    plt.xlabel("x")
-    plt.xscale("log")
-    plt.yscale("log")
-    plt.ylabel("Probability Density")
-    plt.title("Beta Distribution PDFs")
-    plt.grid(True, alpha=0.3)
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
-    print()
+    return neg_log_likelihood
 
 
-if __name__ == "__main__":
-    main()
+data = scipy.stats.beta.rvs(1.0, 5.0, loc=0, scale=1.0, size=50000)
+resolution = 1e-4
+
+smallest_nonzero_pass_at_1 = resolution
+log10_smallest_nonzero_pass_at_1 = np.log10(smallest_nonzero_pass_at_1)
+num_windows_per_factor_of_10 = 5
+log_bins = np.logspace(
+    log10_smallest_nonzero_pass_at_1,
+    0,
+    -int(log10_smallest_nonzero_pass_at_1) * num_windows_per_factor_of_10 + 1,
+)
+small_value_for_plotting = smallest_nonzero_pass_at_1 / 2.0
+bins = np.concatenate(
+    [[-small_value_for_plotting], [small_value_for_plotting], log_bins]
+)
+bins[0] = 0.0
+assert data.min() > bins[0]
+assert data.max() < bins[-1]
+
+plt.plot(1 + np.arange(len(bins)), bins)
+
+# Initial guess for parameters
+initial_params = [
+    0.9,
+    10.1,
+]
+
+# Constraint for parameters to ensure they are positive and realistic for a Beta distribution
+bounds = [(0.01, 100), (0.01, 100)]  # Parameters must be greater than zero
+
+# Maximize the log likelihood by minimizing its negative
+result = scipy.optimize.minimize(
+    lambda params: compute_neg_log_likelihood(params, data=data, bins=bins),
+    x0=initial_params,
+    bounds=bounds,
+    method="L-BFGS-B",
+    options=dict(
+        maxiter=5000,
+        maxls=100,
+        gtol=1e-6,  # Gradient tolerance, adjust as needed),
+    ),
+)
+
+pprint(result.x)

@@ -29,11 +29,12 @@ g = sns.lineplot(
     x="Scaling Parameter",
     y="Score",
     hue="Model",
+    hue_order=src.globals.BON_JAILBREAKING_MODELS_ORDER,
     style="Modality",
 )
 g.set(
     title="Best-of-N Jailbreaking",
-    xlabel=r"Scaling Parameter (Num. Attempts $k$)",
+    xlabel=r"Num. Attempts per Prompt $k$",
     ylabel="Attack Success Rate",
     ylim=(-0.05, 1.05),
 )
@@ -74,6 +75,7 @@ g = sns.lineplot(
     x="Scaling Parameter",
     y="Neg Log Score",
     hue="Model",
+    hue_order=src.globals.BON_JAILBREAKING_MODELS_ORDER,
     style="Modality",
 )
 g = sns.lineplot(
@@ -81,6 +83,7 @@ g = sns.lineplot(
     x="Scaling Parameter",
     y="Predicted Neg Log Score",
     hue="Model",
+    hue_order=src.globals.BON_JAILBREAKING_MODELS_ORDER,
     # style="Modality",
     legend=False,
     linestyle="--",
@@ -118,7 +121,7 @@ g = sns.relplot(
 g.set(
     xscale="log",
     ylabel="ASR@k",
-    xlabel=r"Scaling Parameter (Num. Attempts $k$)",
+    xlabel=r"Num. Attempts per Prompt $k$",
 )
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))
@@ -150,7 +153,7 @@ g.set(
     yscale="log",
     ylim=(1e-2, 1e1),
     ylabel=r"$-\log(\text{ASR@k})$",
-    xlabel=r"Scaling Parameter (Num. Attempts $k$)",
+    xlabel=r"Num. Attempts per Prompt $k$",
 )
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))

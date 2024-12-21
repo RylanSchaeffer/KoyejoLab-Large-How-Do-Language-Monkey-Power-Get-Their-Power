@@ -3,6 +3,8 @@ from matplotlib.colors import LogNorm
 import numpy as np
 import os
 import pandas as pd
+import pprint
+
 import scipy.stats
 import seaborn as sns
 from typing import Any, Dict, List, Tuple
@@ -18,33 +20,63 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
     refresh=False,
 )
 
-# # Load the original pass@k data on MATH.
-# llmonkeys_original_pass_at_k_df = (
-#     src.analyze.create_or_load_large_language_monkeys_original_pass_at_k_df(
-#         refresh=False,
-#     )
-# )
-#
-# tmp_df = llmonkeys_original_pass_at_k_df[
-#     (llmonkeys_original_pass_at_k_df["Scaling Parameter"] == 1)
-#     & (llmonkeys_original_pass_at_k_df["Benchmark"] == "MATH")
-# ].copy()
-#
-# print()
-#
-# plt.close()
-# sns.histplot(data=tmp_df, x="Score")
-# plt.xscale("log")
-# plt.yscale("log")
-# plt.show()
-
-(
-    llmonkeys_original_pass_at_1_df,
-    llmonkeys_pass_at_1_beta_fits_df,
-) = src.analyze.create_or_load_large_language_monkeys_original_pass_at_1_beta_fits(
-    # refresh=False,
-    refresh=True,
+# Load the original pass@k data on MATH.
+llmonkeys_original_pass_at_k_df = (
+    src.analyze.create_or_load_large_language_monkeys_original_pass_at_k_df(
+        refresh=False,
+    )
 )
+
+llmonkeys_original_pass_at_1_df = llmonkeys_original_pass_at_k_df[
+    (llmonkeys_original_pass_at_k_df["Scaling Parameter"] == 1)
+    & (llmonkeys_original_pass_at_k_df["Benchmark"] == "MATH")
+].copy()
+
+
+# For each model, fit a beta distribution to the pass@1 data using MLE.
+#          Model Benchmark  Scaling Parameter         a         b  loc   scale
+# 0   Pythia 70M      MATH                  1  0.052845  1.911908  0.0  0.0346
+# 1  Pythia 160M      MATH                  1  0.145844  1.678871  0.0  0.0365
+# 2  Pythia 410M      MATH                  1  0.154275  1.905497  0.0  0.0947
+# 3    Pythia 1B      MATH                  1  0.186034  2.374676  0.0  0.1359
+# 4  Pythia 2.8B      MATH                  1  0.224330  3.036977  0.0  0.3153
+# 5  Pythia 6.9B      MATH                  1  0.241094  2.710055  0.0  0.2428
+# 6   Pythia 12B      MATH                  1  0.254311  2.014420  0.0  0.2328
+llmonkeys_pass_at_1_beta_fits_df = (
+    llmonkeys_original_pass_at_1_df.groupby(["Model", "Benchmark", "Scaling Parameter"])
+    .apply(
+        lambda df: src.analyze.fit_pass_at_1_beta_distribution_parameters(
+            data=df["Score"].values
+        )
+    )
+    .reset_index()
+)
+pprint.pprint(llmonkeys_pass_at_1_beta_fits_df)
+
+plt.close()
+plt.figure(figsize=(10, 6))
+g = sns.scatterplot(
+    data=llmonkeys_pass_at_1_beta_fits_df,
+    x="a",
+    y="b",
+    hue="Model",
+    hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
+    style="Benchmark",
+    s=200,
+)
+g.set(
+    xlabel=r"$\hat{\alpha}$",
+    xlim=(0.0, 1.0),
+    ylabel=r"$\hat{\beta}$",
+    ylim=(0, 4.0),
+    title="Large Language Monkeys",
+)
+sns.move_legend(g, "upper left", bbox_to_anchor=(1.0, 1.04))
+src.plot.save_plot_with_multiple_extensions(
+    plot_dir=results_dir,
+    plot_filename="llmonkey_y=beta_hat_x=alpha_hat_hue=model_style=benchmark",
+)
+plt.show()
 
 # Create better bins that handle zero and near-zero values
 smallest_nonzero_pass_at_1 = llmonkeys_original_pass_at_1_df[
@@ -73,23 +105,24 @@ g = sns.displot(
     col_wrap=4,
 )
 # Add the fit Beta distributions.
-pass_at_1 = np.logspace(-5, 0, 500)
 for ax_idx, model_name in enumerate(
     src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER
 ):
     model_df = llmonkeys_pass_at_1_beta_fits_df[
         llmonkeys_pass_at_1_beta_fits_df["Model"] == model_name
     ]
-    prob_pass_at_1 = scipy.stats.beta.pdf(
-        pass_at_1,
-        model_df["a"].values[0],
-        model_df["b"].values[0],
+    pass_at_1 = np.logspace(-5, np.log10(model_df["scale"]).values[0], 500)
+    cdf = scipy.stats.beta.cdf(
+        all_bins,
+        a=model_df["a"].values[0],
+        b=model_df["b"].values[0],
         loc=model_df["loc"].values[0],
         scale=model_df["scale"].values[0],
     )
+    prob_per_bin = np.diff(cdf)
     g.axes[ax_idx].plot(
-        pass_at_1,
-        prob_pass_at_1,
+        all_bins[1:],
+        128.0 * prob_per_bin,  # Transform probabilities into counts for consistency.
         color="black",
         linestyle="--",
     )
@@ -106,46 +139,9 @@ g.fig.subplots_adjust(top=0.9)
 
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
-    plot_filename="y=counts_x=score_hue=model_col=model_bins=custom",
+    plot_filename="llmonkey_y=counts_x=score_hue=model_col=model_bins=custom",
 )
 plt.show()
-
-
-beta_distributions_pdf_df = src.analyze.create_or_load_beta_distributions_pdf_df(
-    # refresh=False,
-    refresh=True,
-)
-
-
-# We want to estimate
-print()
-
-
-plt.close()
-plt.figure(figsize=(10, 6))
-g = sns.lineplot(
-    data=beta_distributions_pdf_df,
-    x="x",
-    y="p(x)",
-    hue=r"$\alpha$",
-    style=r"$\beta$",
-    palette="viridis",
-    linewidth=3,
-)
-g.set(
-    title="Beta Distribution PDFs",
-    xscale="log",
-    yscale="log",
-    xlim=(1e-4, 1.05e0),
-    ylim=(1e-2, 1e2),
-)
-sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
-plt.tight_layout()
-src.plot.save_plot_with_multiple_extensions(
-    plot_dir=results_dir,
-    plot_filename="y=p(x)_x=x_hue=alpha_style=beta",
-)
-# plt.show()
 
 
 print("Finished notebooks/50_pass@1_fits.py!")
