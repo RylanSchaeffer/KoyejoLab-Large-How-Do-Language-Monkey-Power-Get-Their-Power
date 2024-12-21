@@ -1,4 +1,6 @@
-# Koyejo Lab Origins of Scaling Laws
+# The Origin of Power Laws from Scaling Inference Compute via Repeat Sampling
+
+![combined_statistical_plots.png](notebooks/90_schematic/results/combined_statistical_plots.png)
 
 ## Installation
 
