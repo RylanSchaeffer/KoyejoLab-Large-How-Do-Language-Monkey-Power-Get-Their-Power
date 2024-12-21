@@ -12,19 +12,42 @@ from typing import Dict, List, Optional, Tuple, Union
 import src.globals
 
 
-def compute_discretized_neg_log_likelihood_beta_distribution(
+# This helps print more columns.
+pd.set_option("display.width", 1000)
+pd.set_option("display.expand_frame_repr", False)
+
+
+def compute_discretized_neg_log_likelihood(
     params: Tuple[float, float],
     data: np.ndarray,
     bins: np.ndarray,
+    distribution: str = "beta",
     epsilon: float = 1e-16,
 ):
-    a, b = params
-    assert not np.isnan(a)
-    assert not np.isnan(b)
-
     # 1. Compute probability mass per bin
-    cdf_values = scipy.stats.beta.cdf(bins, a, b, loc=0.0, scale=data.max())
-    prob_mass = np.diff(cdf_values) + epsilon
+    if distribution == "beta":
+        a, b = params
+        assert not np.isnan(a)
+        assert not np.isnan(b)
+
+        cdf_values = scipy.stats.beta.cdf(bins, a, b, loc=0.0, scale=data.max())
+        prob_mass = np.diff(cdf_values) + epsilon
+    elif distribution == "kumaraswamy":
+        a, b = params
+        assert not np.isnan(a)
+        assert not np.isnan(b)
+
+        # Normally, the CDF of the Kumaraswamy distribution is:
+        #   F(x) = 1 - (1 - x^a)^b
+        # But we want to introduce a scale parameter, so we rescale the input to get the new CDF:
+        #   F(x) = 1 - (1 - (x / scale)^a)^b
+        cdf_values = 1.0 - np.power(1.0 - np.power(bins / (data.max() + epsilon), a), b)
+        prob_mass = np.diff(cdf_values) + epsilon
+
+    elif distribution == "lognormal":
+        raise NotImplementedError
+    else:
+        raise ValueError(f"Unknown distribution: {distribution}")
 
     assert np.all(prob_mass >= 0.0)
     log_prob_mass = np.log(prob_mass)
@@ -786,8 +809,8 @@ def fit_pass_at_1_beta_distribution_parameters(
 
     # Maximize the log likelihood by minimizing its negative
     optimize_result = scipy.optimize.minimize(
-        lambda params: compute_discretized_neg_log_likelihood_beta_distribution(
-            params, data=data, bins=bins
+        lambda params: compute_discretized_neg_log_likelihood(
+            params, data=data, bins=bins, distribution="beta"
         ),
         x0=initial_params,
         bounds=bounds,
@@ -805,6 +828,113 @@ def fit_pass_at_1_beta_distribution_parameters(
             "b": optimize_result.x[1],
             "loc": 0.0,
             "scale": data.max(),
+            "neg_log_likelihood": optimize_result.fun,
+            "aic": 2 * len(initial_params) + 2 * optimize_result.fun,
+            "bic": len(initial_params) * np.log(len(data)) + 2 * optimize_result.fun,
+        }
+    )
+
+    return result
+
+
+def fit_pass_at_1_log_normal_distribution_parameters(
+    data: np.ndarray,
+    resolution: float = 1e-4,
+    initial_params: Tuple[float, float] = (0.9, 5.1),
+    bounds: Tuple[Tuple[float, float]] = ((0.01, 100), (0.01, 100)),
+    num_windows_per_factor_of_10: int = 10,
+) -> pd.Series:
+    smallest_nonzero_pass_at_1 = resolution
+    log10_smallest_nonzero_pass_at_1 = np.log10(smallest_nonzero_pass_at_1)
+    log_bins = np.logspace(
+        log10_smallest_nonzero_pass_at_1,
+        0,
+        -int(log10_smallest_nonzero_pass_at_1) * num_windows_per_factor_of_10 + 1,
+    )
+    small_value_for_plotting = smallest_nonzero_pass_at_1 / 2.0
+    bins = np.concatenate(
+        [[-small_value_for_plotting], [small_value_for_plotting], log_bins]
+    )
+    bins[0] = 0.0
+    assert data.min() >= bins[0]
+    assert data.max() < bins[-1]
+
+    # Maximize the log likelihood by minimizing its negative
+    optimize_result = scipy.optimize.minimize(
+        lambda params: compute_discretized_neg_log_likelihood(
+            params, data=data, bins=bins, distribution="log_normal"
+        ),
+        x0=initial_params,
+        bounds=bounds,
+        method="L-BFGS-B",
+        options=dict(
+            maxiter=5000,
+            maxls=100,
+            gtol=1e-6,  # Gradient tolerance, adjust as needed),
+        ),
+    )
+
+    result = pd.Series(
+        {
+            "a": optimize_result.x[0],
+            "b": optimize_result.x[1],
+            "loc": 0.0,
+            "scale": data.max(),
+            "neg_log_likelihood": optimize_result.fun,
+            "aic": 2 * len(initial_params) + 2 * optimize_result.fun,
+            "bic": len(initial_params) * np.log(len(data)) + 2 * optimize_result.fun,
+        }
+    )
+
+    return result
+
+
+def fit_pass_at_1_log_uniform_distribution_parameters(
+    data: np.ndarray,
+    resolution: float = 1e-4,
+    initial_params: Tuple[float, float] = (0.9, 5.1),
+    bounds: Tuple[Tuple[float, float]] = ((0.01, 100), (0.01, 100)),
+    num_windows_per_factor_of_10: int = 10,
+) -> pd.Series:
+    smallest_nonzero_pass_at_1 = resolution
+    log10_smallest_nonzero_pass_at_1 = np.log10(smallest_nonzero_pass_at_1)
+    log_bins = np.logspace(
+        log10_smallest_nonzero_pass_at_1,
+        0,
+        -int(log10_smallest_nonzero_pass_at_1) * num_windows_per_factor_of_10 + 1,
+    )
+    small_value_for_plotting = smallest_nonzero_pass_at_1 / 2.0
+    bins = np.concatenate(
+        [[-small_value_for_plotting], [small_value_for_plotting], log_bins]
+    )
+    bins[0] = 0.0
+    assert data.min() >= bins[0]
+    assert data.max() < bins[-1]
+
+    # Maximize the log likelihood by minimizing its negative
+    optimize_result = scipy.optimize.minimize(
+        lambda params: compute_discretized_neg_log_likelihood(
+            params, data=data, bins=bins, distribution="log_uniform"
+        ),
+        x0=initial_params,
+        bounds=bounds,
+        method="L-BFGS-B",
+        options=dict(
+            maxiter=5000,
+            maxls=100,
+            gtol=1e-6,  # Gradient tolerance, adjust as needed),
+        ),
+    )
+
+    result = pd.Series(
+        {
+            "a": optimize_result.x[0],
+            "b": optimize_result.x[1],
+            "loc": 0.0,
+            "scale": data.max(),
+            "neg_log_likelihood": optimize_result.fun,
+            "aic": 2 * len(initial_params) + 2 * optimize_result.fun,
+            "bic": len(initial_params) * np.log(len(data)) + 2 * optimize_result.fun,
         }
     )
 
