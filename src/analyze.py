@@ -32,6 +32,18 @@ def compute_discretized_neg_log_likelihood(
 
         cdf_values = scipy.stats.beta.cdf(bins, a, b, loc=0.0, scale=data.max())
         prob_mass = np.diff(cdf_values) + epsilon
+    elif distribution == "continuous_bernoulli":
+        lam = params
+        assert not np.isnan(lam)
+        if lam == 0.5:
+            cdf_values = bins
+        else:
+            cdf_values = (
+                np.power(lam, bins) * np.power(1.0 - lam, 1.0 - bins) + lam - 1.0
+            )
+            cdf_values /= 2.0 * lam - 1
+
+        prob_mass = np.diff(cdf_values) + epsilon
     elif distribution == "kumaraswamy":
         a, b = params
         assert not np.isnan(a)
@@ -41,7 +53,8 @@ def compute_discretized_neg_log_likelihood(
         #   F(x) = 1 - (1 - x^a)^b
         # But we want to introduce a scale parameter, so we rescale the input to get the new CDF:
         #   F(x) = 1 - (1 - (x / scale)^a)^b
-        cdf_values = 1.0 - np.power(1.0 - np.power(bins / (data.max() + epsilon), a), b)
+        data = data / (data.max() + epsilon)
+        cdf_values = 1.0 - np.power(1.0 - np.power(bins, a), b)
         prob_mass = np.diff(cdf_values) + epsilon
 
     elif distribution == "lognormal":
@@ -837,6 +850,110 @@ def fit_pass_at_1_beta_distribution_parameters(
     return result
 
 
+def fit_pass_at_1_continuous_bernoulli_distribution_parameters(
+    data: np.ndarray,
+    resolution: float = 1e-4,
+    initial_params: Tuple[float, float] = (0.9, 5.1),
+    bounds: Tuple[Tuple[float, float]] = ((0.01, 100), (0.01, 100)),
+    num_windows_per_factor_of_10: int = 10,
+) -> pd.Series:
+    smallest_nonzero_pass_at_1 = resolution
+    log10_smallest_nonzero_pass_at_1 = np.log10(smallest_nonzero_pass_at_1)
+    log_bins = np.logspace(
+        log10_smallest_nonzero_pass_at_1,
+        0,
+        -int(log10_smallest_nonzero_pass_at_1) * num_windows_per_factor_of_10 + 1,
+    )
+    small_value_for_plotting = smallest_nonzero_pass_at_1 / 2.0
+    bins = np.concatenate(
+        [[-small_value_for_plotting], [small_value_for_plotting], log_bins]
+    )
+    bins[0] = 0.0
+    assert data.min() >= bins[0]
+    assert data.max() < bins[-1]
+
+    # Maximize the log likelihood by minimizing its negative
+    optimize_result = scipy.optimize.minimize(
+        lambda params: compute_discretized_neg_log_likelihood(
+            params, data=data, bins=bins, distribution="beta"
+        ),
+        x0=initial_params,
+        bounds=bounds,
+        method="L-BFGS-B",
+        options=dict(
+            maxiter=5000,
+            maxls=100,
+            gtol=1e-6,  # Gradient tolerance, adjust as needed),
+        ),
+    )
+
+    result = pd.Series(
+        {
+            "a": optimize_result.x[0],
+            "b": optimize_result.x[1],
+            "loc": 0.0,
+            "scale": data.max(),
+            "neg_log_likelihood": optimize_result.fun,
+            "aic": 2 * len(initial_params) + 2 * optimize_result.fun,
+            "bic": len(initial_params) * np.log(len(data)) + 2 * optimize_result.fun,
+        }
+    )
+
+    return result
+
+
+def fit_pass_at_1_kumaraswamy_distribution_parameters(
+    data: np.ndarray,
+    resolution: float = 1e-4,
+    initial_params: Tuple[float, float] = (0.9, 5.1),
+    bounds: Tuple[Tuple[float, float]] = ((0.01, 100), (0.01, 100)),
+    num_windows_per_factor_of_10: int = 10,
+) -> pd.Series:
+    smallest_nonzero_pass_at_1 = resolution
+    log10_smallest_nonzero_pass_at_1 = np.log10(smallest_nonzero_pass_at_1)
+    log_bins = np.logspace(
+        log10_smallest_nonzero_pass_at_1,
+        0,
+        -int(log10_smallest_nonzero_pass_at_1) * num_windows_per_factor_of_10 + 1,
+    )
+    small_value_for_plotting = smallest_nonzero_pass_at_1 / 2.0
+    bins = np.concatenate(
+        [[-small_value_for_plotting], [small_value_for_plotting], log_bins]
+    )
+    bins[0] = 0.0
+    assert data.min() >= bins[0]
+    assert data.max() < bins[-1]
+
+    # Maximize the log likelihood by minimizing its negative
+    optimize_result = scipy.optimize.minimize(
+        lambda params: compute_discretized_neg_log_likelihood(
+            params, data=data, bins=bins, distribution="kumaraswamy"
+        ),
+        x0=initial_params,
+        bounds=bounds,
+        method="L-BFGS-B",
+        options=dict(
+            maxiter=5000,
+            maxls=100,
+            gtol=1e-6,  # Gradient tolerance, adjust as needed),
+        ),
+    )
+
+    result = pd.Series(
+        {
+            "a": optimize_result.x[0],
+            "b": optimize_result.x[1],
+            "loc": 0.0,
+            "scale": data.max(),
+            "neg_log_likelihood": optimize_result.fun,
+            "aic": 2 * len(initial_params) + 2 * optimize_result.fun,
+            "bic": len(initial_params) * np.log(len(data)) + 2 * optimize_result.fun,
+        }
+    )
+
+    return result
+
+
 def fit_pass_at_1_log_normal_distribution_parameters(
     data: np.ndarray,
     resolution: float = 1e-4,
@@ -969,11 +1086,13 @@ def fit_power_law(
         Multi-indexed Series containing the fitted parameters 'a' and 'b' for each group
     """
 
-    def objective_function(params, x, y):
+    def objective_function(
+        params: Tuple[float, float], x: np.ndarray, y: np.ndarray
+    ) -> float:
         """Calculate sum of squared errors for current parameters"""
         a, b = params
-        predicted = -a * x + b
-        return np.sum((y - predicted) ** 2)
+        predicted = a - b * x
+        return np.sum(np.power(y - predicted, 2.0))
 
     def fit_group(group_df):
         # Log transform the data
@@ -983,10 +1102,10 @@ def fit_power_law(
         # Initial guess using linear regression
         x_mean = log_x.mean()
         y_mean = log_y.mean()
-        a_init = np.sum((log_x - x_mean) * (log_y - y_mean)) / np.sum(
+        b_init = -np.sum((log_x - x_mean) * (log_y - y_mean)) / np.sum(
             (log_x - x_mean) ** 2
         )
-        b_init = y_mean - a_init * x_mean
+        a_init = -(y_mean - b_init * x_mean)
 
         # Optimize parameters
         result = minimize(
@@ -1022,7 +1141,7 @@ def fit_power_law(
         # Calculate predictions using the power law relationship
         a, b = params["a"], params["b"]
         x_values = df_with_predictions.loc[mask, covariate_col]
-        predicted_values = np.exp(b) * np.power(x_values, -a)
+        predicted_values = np.exp(-a) * np.power(x_values, -b)
 
         # Add predictions to the dataframe
         df_with_predictions.loc[mask, f"Predicted {target_col}"] = predicted_values

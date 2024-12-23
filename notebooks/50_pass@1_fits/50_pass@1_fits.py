@@ -32,6 +32,28 @@ bon_jailbreaking_pass_at_1_df = bon_jailbreaking_pass_at_k_df[
 ].copy()
 
 
+# For each model, fit a Kumaraswamy distribution to the pass@1 data using MLE.
+#                Model Modality  Scaling Parameter         a         b  loc     scale  neg_log_likelihood        aic        bic
+# 0  Claude 3.5 Sonnet     Text                  1  0.249355  2.445000  0.0  0.733333           13.003700  30.007401  36.145209
+# 1    Claude 3.5 Opus     Text                  1  0.367223  1.701264  0.0  0.516667           13.448608  30.897217  37.035025
+# 2   Gemini 1.5 Flash     Text                  1  0.169614  1.738275  0.0  0.100000           11.471753  26.943506  33.081314
+# 3     Gemini 1.5 Pro     Text                  1  0.107558  1.428970  0.0  0.083333            9.927041  23.854083  29.991891
+# 4         GPT4o Mini     Text                  1  0.370654  1.972520  0.0  0.583333           13.654265  31.308529  37.446338
+# 5              GPT4o     Text                  1  0.258341  1.562241  0.0  0.500000           13.848007  31.696014  37.833822
+# 6      Llama 3 8B IT     Text                  1  0.651404  2.676549  0.0  0.266667           12.351333  28.702666  34.840474
+bon_jailbreaking_pass_at_1_kumaraswamy_fits_df = (
+    bon_jailbreaking_pass_at_1_df.groupby(["Model", "Modality", "Scaling Parameter"])
+    .apply(
+        lambda df: src.analyze.fit_pass_at_1_kumaraswamy_distribution_parameters(
+            data=df["Score"].values
+        )
+    )
+    .reset_index()
+)
+
+pprint.pprint(bon_jailbreaking_pass_at_1_kumaraswamy_fits_df)
+
+
 # For each model, fit a beta distribution to the pass@1 data using MLE.
 #                Model Modality  Scaling Parameter         a         b  loc     scale
 # 0  Claude 3.5 Sonnet     Text                  1  0.187238  3.576219  0.0  0.733333
@@ -51,6 +73,7 @@ bon_jailbreaking_pass_at_1_beta_fits_df = (
     .reset_index()
 )
 pprint.pprint(bon_jailbreaking_pass_at_1_beta_fits_df)
+
 
 plt.close()
 plt.figure(figsize=(10, 6))
