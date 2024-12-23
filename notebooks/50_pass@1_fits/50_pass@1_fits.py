@@ -50,7 +50,7 @@ bon_jailbreaking_pass_at_1_kumaraswamy_fits_df = (
     )
     .reset_index()
 )
-
+print("Best-of-N Jailbreaking Kumaraswamy Fit: ")
 pprint.pprint(bon_jailbreaking_pass_at_1_kumaraswamy_fits_df)
 
 
@@ -72,6 +72,7 @@ bon_jailbreaking_pass_at_1_beta_fits_df = (
     )
     .reset_index()
 )
+print("Best-of-N Jailbreaking Beta Fit: ")
 pprint.pprint(bon_jailbreaking_pass_at_1_beta_fits_df)
 
 
@@ -79,8 +80,8 @@ plt.close()
 plt.figure(figsize=(10, 6))
 g = sns.scatterplot(
     data=bon_jailbreaking_pass_at_1_beta_fits_df,
-    x="a",
-    y="b",
+    x="alpha",
+    y="beta",
     hue="Model",
     hue_order=src.globals.BON_JAILBREAKING_MODELS_ORDER,
     style="Modality",
@@ -135,8 +136,8 @@ for ax_idx, model_name in enumerate(src.globals.BON_JAILBREAKING_MODELS_ORDER):
     pass_at_1 = np.logspace(-5, np.log10(model_df["scale"]).values[0], 500)
     cdf = scipy.stats.beta.cdf(
         all_bins,
-        a=model_df["a"].values[0],
-        b=model_df["b"].values[0],
+        a=model_df["alpha"].values[0],
+        b=model_df["beta"].values[0],
         loc=model_df["loc"].values[0],
         scale=model_df["scale"].values[0],
     )
@@ -179,6 +180,19 @@ llmonkeys_original_pass_at_1_df = llmonkeys_original_pass_at_k_df[
 ].copy()
 
 
+# For each model, fit a Kumaraswamy distribution to the pass@1 data using MLE.
+llmonkeys_pass_at_1_kumaraswamy_fits_df = (
+    llmonkeys_original_pass_at_1_df.groupby(["Model", "Benchmark", "Scaling Parameter"])
+    .apply(
+        lambda df: src.analyze.fit_pass_at_1_kumaraswamy_distribution_parameters(
+            data=df["Score"].values
+        )
+    )
+    .reset_index()
+)
+print("Large Language Monkey Kumaraswamy Fit: ")
+pprint.pprint(llmonkeys_pass_at_1_kumaraswamy_fits_df)
+
 # For each model, fit a beta distribution to the pass@1 data using MLE.
 #          Model Benchmark  Scaling Parameter         a         b  loc   scale
 # 0   Pythia 70M      MATH                  1  0.052845  1.911908  0.0  0.0346
@@ -197,14 +211,15 @@ llmonkeys_pass_at_1_beta_fits_df = (
     )
     .reset_index()
 )
+print("Large Language Monkey Beta Fit: ")
 pprint.pprint(llmonkeys_pass_at_1_beta_fits_df)
 
 plt.close()
 plt.figure(figsize=(10, 6))
 g = sns.scatterplot(
     data=llmonkeys_pass_at_1_beta_fits_df,
-    x="a",
-    y="b",
+    x="alpha",
+    y="beta",
     hue="Model",
     hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
     style="Benchmark",
@@ -260,8 +275,8 @@ for ax_idx, model_name in enumerate(
     pass_at_1 = np.logspace(-5, np.log10(model_df["scale"]).values[0], 500)
     cdf = scipy.stats.beta.cdf(
         all_bins,
-        a=model_df["a"].values[0],
-        b=model_df["b"].values[0],
+        a=model_df["alpha"].values[0],
+        b=model_df["beta"].values[0],
         loc=model_df["loc"].values[0],
         scale=model_df["scale"].values[0],
     )

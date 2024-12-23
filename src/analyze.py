@@ -837,8 +837,8 @@ def fit_pass_at_1_beta_distribution_parameters(
 
     result = pd.Series(
         {
-            "a": optimize_result.x[0],
-            "b": optimize_result.x[1],
+            "alpha": optimize_result.x[0],
+            "beta": optimize_result.x[1],
             "loc": 0.0,
             "scale": data.max(),
             "neg_log_likelihood": optimize_result.fun,
@@ -1141,9 +1141,11 @@ def fit_power_law(
         # Calculate predictions using the power law relationship
         a, b = params["a"], params["b"]
         x_values = df_with_predictions.loc[mask, covariate_col]
-        predicted_values = np.exp(-a) * np.power(x_values, -b)
+        predicted_values = np.exp(a) * np.power(x_values, -b)
 
         # Add predictions to the dataframe
         df_with_predictions.loc[mask, f"Predicted {target_col}"] = predicted_values
+
+    fitted_power_law_parameters_df.reset_index(inplace=True)
 
     return df_with_predictions, fitted_power_law_parameters_df
