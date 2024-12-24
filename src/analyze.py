@@ -166,13 +166,18 @@ def compute_discretized_neg_log_likelihood(
 def compute_scaling_exponent_from_distributional_fit(
     distributional_fit_df: pd.DataFrame,
     distribution: str = "beta",
+    k_values: Optional[Union[np.ndarray, List[float]]] = None,
 ) -> pd.DataFrame:
+    if k_values is None:
+        k_values = np.logspace(0, 5, 25, dtype=int)
+    if isinstance(k_values, list):
+        k_values = np.array(k_values)
+
     if distribution == "beta_two_parameter":
         raise NotImplementedError
     elif distribution == "beta_three_parameter":
         distributional_fit_df["a"] = np.nan
         distributional_fit_df["b"] = np.nan
-        k_values = np.logspace(0, 5, 25, dtype=int)
         integral_values = np.zeros_like(k_values, dtype=np.float64)
         for row_idx in range(len(distributional_fit_df)):
             for k_idx, k in enumerate(k_values):

@@ -42,6 +42,7 @@ bon_jailbreaking_pass_at_1_beta_fits_df = (
     src.analyze.compute_scaling_exponent_from_distributional_fit(
         distributional_fit_df=bon_jailbreaking_pass_at_1_beta_fits_df,
         distribution="beta_three_parameter",
+        k_values=src.globals.BON_JAILBREAKING_Ks_LIST,
     )
 )
 
@@ -127,6 +128,7 @@ llmonkeys_pass_at_1_beta_fits_df = (
     src.analyze.compute_scaling_exponent_from_distributional_fit(
         distributional_fit_df=llmonkeys_pass_at_1_beta_fits_df,
         distribution="beta_three_parameter",
+        k_values=src.globals.LARGE_LANGUAGE_MONKEYS_ORIGINAL_Ks_LIST,
     )
 )
 print("Large Language Monkey Beta Fit: ")
