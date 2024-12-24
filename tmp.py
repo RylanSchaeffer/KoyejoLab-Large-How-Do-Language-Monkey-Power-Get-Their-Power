@@ -1,90 +1,110 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from pprint import pprint
-import scipy.stats
-import numpy as np
-import scipy.stats
-import scipy.integrate
-import scipy.optimize
-from typing import Tuple
+from scipy import integrate
+import scipy.special
+import seaborn as sns
+import pandas as pd
+from tqdm import tqdm
+import warnings
+
+import src.analyze
 
 
-def compute_neg_log_likelihood(
-    params: Tuple[float, float],
-    data: np.ndarray,
-    bins: np.ndarray,
-    epsilon: float = 1e-16,
-):
-    a, b = params
-    assert not np.isnan(a)
-    assert not np.isnan(b)
+def compute_integral(k, alpha, beta, c, debug=False):
+    """
+    Compute the integral using adaptive quadrature with improved error handling
+    """
+    if not (0 < c < 1 and alpha > 0 and beta > 0):
+        return np.nan
 
-    # 1. Compute probability mass per bin
-    cdf_values = scipy.stats.beta.cdf(bins, a, b, loc=0.0, scale=data.max())
-    prob_mass = np.diff(cdf_values) + epsilon
+    # Use a smaller absolute tolerance and increase max evaluations
+    result, error = integrate.quad(
+        beta_three_parameter_distribution_integrand,
+        0.0,
+        c,
+        args=(k, alpha, beta, c),
+        epsabs=1e-10,
+        epsrel=1e-8,
+        limit=500,
+    )
 
-    assert np.all(prob_mass >= 0.0)
-    log_prob_mass = np.log(prob_mass)
+    # Check if result is reasonable
+    if not np.isfinite(result) or error > 1e-3 * abs(result):
+        return np.nan
 
-    # 2. Bin the data
-    num_data_per_bin = np.histogram(data, bins)[0]
-
-    # 3. Compute the total log likelihood
-    log_likelihood = np.mean(np.multiply(num_data_per_bin, log_prob_mass))
-
-    # 4. Return the negative log likelihood.
-    neg_log_likelihood = -log_likelihood
-
-    print("alpha: ", a)
-    print("beta: ", b)
-    print("NLL: ", neg_log_likelihood)
-    print("\n\n")
-    assert not np.isinf(neg_log_likelihood)
-
-    return neg_log_likelihood
+    return result
 
 
-data = scipy.stats.beta.rvs(1.0, 5.0, loc=0, scale=1.0, size=50000)
-resolution = 1e-4
+# Parameter ranges - reduced for initial testing
+k_values = np.logspace(0, 5, 20, dtype=int).tolist()[::-1]  # Reduced number of points
+alpha_values = np.array([0.1, 0.2, 0.3, 0.6])
+beta_values = np.array([1.5, 2.0, 2.5, 3.0, 3.5, 4.0])
+c_values = np.array([0.01, 0.1, 0.5])
 
-smallest_nonzero_pass_at_1 = resolution
-log10_smallest_nonzero_pass_at_1 = np.log10(smallest_nonzero_pass_at_1)
-num_windows_per_factor_of_10 = 5
-log_bins = np.logspace(
-    log10_smallest_nonzero_pass_at_1,
-    0,
-    -int(log10_smallest_nonzero_pass_at_1) * num_windows_per_factor_of_10 + 1,
+# Create parameter combinations with debugging for first few cases
+results = []
+debug_first_n = 5  # Number of cases to debug
+total_count = 0
+
+for k in tqdm(k_values, desc="Processing k values"):
+    for alpha in alpha_values:
+        for beta in beta_values:
+            for c in c_values:
+                debug = total_count < debug_first_n
+                integral_value = compute_integral(k, alpha, beta, c, debug=debug)
+                results.append(
+                    {
+                        "k": k,
+                        "alpha": alpha,
+                        "beta": beta,
+                        "c": c,
+                        "integral_value": integral_value,
+                    }
+                )
+                total_count += 1
+
+# Create DataFrame
+df = pd.DataFrame(results)
+
+# Sort by parameters
+df = df.sort_values(["k", "alpha", "beta", "c"]).reset_index(drop=False)
+
+# Display first few rows and basic statistics
+print("\nFirst few rows of the results:")
+print(df.head().to_string())
+
+print("\nSummary statistics:")
+print(df["integral_value"].describe())
+
+plt.close()
+sns.relplot(
+    data=df,
+    kind="line",
+    x="k",
+    y="integral_value",
+    hue="alpha",
+    col="c",
+    style="beta",
 )
-small_value_for_plotting = smallest_nonzero_pass_at_1 / 2.0
-bins = np.concatenate(
-    [[-small_value_for_plotting], [small_value_for_plotting], log_bins]
-)
-bins[0] = 0.0
-assert data.min() > bins[0]
-assert data.max() < bins[-1]
+plt.yscale("log")
+plt.xscale("log")
+plt.xlabel("k")
+plt.ylabel("Integral Value")
+# plt.show()
 
-plt.plot(1 + np.arange(len(bins)), bins)
 
-# Initial guess for parameters
-initial_params = [
-    0.9,
-    10.1,
-]
-
-# Constraint for parameters to ensure they are positive and realistic for a Beta distribution
-bounds = [(0.01, 100), (0.01, 100)]  # Parameters must be greater than zero
-
-# Maximize the log likelihood by minimizing its negative
-result = scipy.optimize.minimize(
-    lambda params: compute_neg_log_likelihood(params, data=data, bins=bins),
-    x0=initial_params,
-    bounds=bounds,
-    method="L-BFGS-B",
-    options=dict(
-        maxiter=5000,
-        maxls=100,
-        gtol=1e-6,  # Gradient tolerance, adjust as needed),
-    ),
+(
+    _,
+    fitted_power_law_parameters_df,
+) = src.analyze.fit_power_law(
+    df,
+    covariate_col="k",
+    target_col="integral_value",
+    groupby_cols=["alpha", "beta", "c"],
 )
 
-pprint(result.x)
+
+# Count NaN values
+nan_count = df["integral_value"].isna().sum()
+total_count = len(df)
+print(f"\nNaN values: {nan_count}/{total_count} ({100*nan_count/total_count:.1f}%)")

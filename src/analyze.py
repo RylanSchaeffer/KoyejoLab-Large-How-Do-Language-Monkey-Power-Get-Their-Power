@@ -5,6 +5,7 @@ import itertools
 import numpy as np
 import os
 import pandas as pd
+from scipy import integrate
 from scipy.optimize import minimize
 import scipy.stats
 from typing import Dict, List, Optional, Tuple, Union
@@ -15,6 +16,85 @@ import src.globals
 # This helps print more columns.
 pd.set_option("display.width", 1000)
 pd.set_option("display.expand_frame_repr", False)
+
+
+def compute_beta_three_parameter_distribution_integrand(
+    p: float, k: int, alpha: float, beta: float, c: float
+) -> float:
+    """
+    Log of the integrand to improve numerical stability
+    """
+    if p <= 0 or p >= c:
+        return 0.0
+
+    # Compute in log space to avoid overflow/underflow
+    log_term1 = k * np.log1p(-p)
+    log_term2 = (alpha - 1) * np.log(p)
+    log_term3 = (beta - 1) * np.log(c - p)
+    log_term4 = -(alpha + beta - 1) * np.log(c)
+    log_term5 = -scipy.special.betaln(alpha, beta)
+    log_result = log_term1 + log_term2 + log_term3 + log_term4 + log_term5
+    return np.exp(log_result)
+
+
+def compute_beta_three_parameter_distribution_integral(
+    k: int, alpha: float, beta: float, scale: float
+) -> float:
+    """
+    Compute the integral using adaptive quadrature with improved error handling
+    """
+    if not (0 < scale < 1 and alpha > 0 and beta > 0):
+        return np.nan
+
+    # Use a smaller absolute tolerance and increase max evaluations
+    result, error = integrate.quad(
+        compute_beta_three_parameter_distribution_integrand,
+        0.0,
+        scale,
+        args=(k, alpha, beta, scale),
+        epsabs=1e-12,
+        epsrel=1e-10,
+        limit=5000,
+    )
+
+    # Check if result is reasonable
+    if not np.isfinite(result) or error > 1e-3 * abs(result):
+        return np.nan
+
+    return result
+
+
+def compute_kumaraswamy_three_parameter_distribution_integrand(
+    p: float, k: int, alpha: float, beta: float, scale: float
+) -> float:
+    raise NotImplementedError
+
+
+def compute_kumaraswamy_three_parameter_distribution_integral(
+    k: int, alpha: float, beta: float, scale: float
+) -> float:
+    """
+    Compute the integral using adaptive quadrature with improved error handling
+    """
+    if not (0 < scale < 1 and alpha > 0 and beta > 0):
+        return np.nan
+
+    # Use a smaller absolute tolerance and increase max evaluations
+    result, error = integrate.quad(
+        compute_kumaraswamy_three_parameter_distribution_integrand,
+        0.0,
+        scale,
+        args=(k, alpha, beta, scale),
+        epsabs=1e-12,
+        epsrel=1e-10,
+        limit=5000,
+    )
+
+    # Check if result is reasonable
+    if not np.isfinite(result) or error > 1e-3 * abs(result):
+        return np.nan
+
+    return result
 
 
 def compute_discretized_neg_log_likelihood(
@@ -81,6 +161,59 @@ def compute_discretized_neg_log_likelihood(
     assert not np.isinf(neg_log_likelihood)
 
     return neg_log_likelihood
+
+
+def compute_scaling_exponent_from_distributional_fit(
+    distributional_fit_df: pd.DataFrame,
+    distribution: str = "beta",
+) -> pd.DataFrame:
+    if distribution == "beta_two_parameter":
+        raise NotImplementedError
+    elif distribution == "beta_three_parameter":
+        distributional_fit_df["a"] = np.nan
+        distributional_fit_df["b"] = np.nan
+        k_values = np.logspace(0, 5, 25, dtype=int)
+        integral_values = np.zeros_like(k_values, dtype=np.float64)
+        for row_idx in range(len(distributional_fit_df)):
+            for k_idx, k in enumerate(k_values):
+                integral_values[
+                    k_idx
+                ] = compute_beta_three_parameter_distribution_integral(
+                    k=k,
+                    alpha=distributional_fit_df["alpha"].values[row_idx],
+                    beta=distributional_fit_df["beta"].values[row_idx],
+                    scale=distributional_fit_df["scale"].values[row_idx],
+                )
+
+            tmp_df = pd.DataFrame.from_dict(
+                {
+                    "Scaling Parameter": k_values,
+                    "Neg Log Score": -np.log(1.0 - integral_values),
+                    "groupby_placeholder": ["placeholder"] * len(k_values),
+                }
+            )
+
+            # Fit a power law to the integral values.
+            (
+                _,
+                fitted_power_law_parameters_df,
+            ) = src.analyze.fit_power_law(
+                tmp_df,
+                covariate_col="Scaling Parameter",
+                target_col="Neg Log Score",
+                groupby_cols=["groupby_placeholder"],
+            )
+            distributional_fit_df.loc[row_idx, "a"] = fitted_power_law_parameters_df[
+                "a"
+            ].values[0]
+            distributional_fit_df.loc[row_idx, "b"] = fitted_power_law_parameters_df[
+                "b"
+            ].values[0]
+
+    else:
+        raise ValueError(f"Unknown distribution: {distribution}")
+
+    return distributional_fit_df
 
 
 def create_or_load_beta_distributions_pdf_df(
