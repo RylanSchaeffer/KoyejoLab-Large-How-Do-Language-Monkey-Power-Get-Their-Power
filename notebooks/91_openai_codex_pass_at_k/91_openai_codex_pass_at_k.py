@@ -1,9 +1,19 @@
 import numpy as np
+from matplotlib.colors import LogNorm
 import matplotlib.pyplot as plt
+import os
 import pandas as pd
 import seaborn as sns
 
 import src.plot
+import src.utils
+
+
+data_dir, results_dir = src.utils.setup_notebook_dir(
+    notebook_dir=os.path.dirname(os.path.abspath(__file__)),
+    refresh=False,
+)
+
 
 np.random.seed(0)
 
@@ -37,12 +47,7 @@ ns = [
     100000.0,
 ]
 true_probs = [0.001, 0.01, 0.1]
-ks = [
-    5,
-    10,
-    20,
-    100,
-]
+ks = [3.0, 10.0, 32.0, 100.0, 316.0, 1000.0]
 n_trials = 5000  # Number of trials for each sample size
 
 dfs_list = []
@@ -59,21 +64,23 @@ for true_prob in true_probs:
             dfs_list.append(
                 pd.DataFrame.from_dict(
                     {
-                        "n": [n] * (2 * len(ks)),
-                        "true_prob": [true_prob] * (2 * len(ks)),
-                        "trial": [trial] * (2 * len(ks)),
-                        "k": (2 * ks),
-                        "type": [r"$1 - (1-\hat{p})^k$"] * len(ks)
-                        + [r"$1 - \binom{n-c}{k} / \binom{n}{k}$"] * len(ks),
+                        "n": [n] * (3 * len(ks)),
+                        "true_prob": [true_prob] * (3 * len(ks)),
+                        "trial": [trial] * (3 * len(ks)),
+                        "k": (3 * ks),
+                        "Estimator": [r"$1 - (1-\hat{p})^k$"] * len(ks)
+                        + [r"$1 - \binom{n-c}{k} / \binom{n}{k}$"] * len(ks)
+                        + ["True"] * len(ks),
                         "pass_at_k": biased_pass_at_k.tolist()
-                        + unbiased_pass_at_k.tolist(),
+                        + unbiased_pass_at_k.tolist()
+                        + (1.0 - np.power(1.0 - true_prob, ks)).tolist(),
                     }
                 )
             )
 
 df = pd.concat(dfs_list, ignore_index=True).reset_index(drop=True)
 # Exclude any trials where ks >= n.
-df = df[df["k"] < df["n"]]
+df = df[(df["k"] <= df["n"]) | (df["Estimator"] == "True")]
 
 
 plt.close()
@@ -83,16 +90,46 @@ g = sns.relplot(
     x="n",
     y="pass_at_k",
     hue="k",
-    style="type",
+    hue_norm=LogNorm(),
+    style="Estimator",
     col="true_prob",
     estimator="mean",
     errorbar="ci",
-    palette="tab10",
+    palette="cool",
     facet_kws={"sharey": False},
 )
-g.set(xscale="log")
+g.set(xscale="log", ylabel=r"$\operatorname{pass@k}$", yscale="log")
 g.set_titles(col_template=r"True $p$: {col_name}")
-plt.show()
+sns.move_legend(g, "upper left", bbox_to_anchor=(1.0, 1.04))
+src.plot.save_plot_with_multiple_extensions(
+    plot_dir=results_dir,
+    plot_filename="y=pass_at_k_x=n_hue=k_style=type_col=true_prob",
+)
+# plt.show()
 
+
+plt.close()
+g = sns.relplot(
+    data=df,
+    kind="line",
+    x="k",
+    y="pass_at_k",
+    hue="n",
+    hue_norm=LogNorm(),
+    style="Estimator",
+    col="true_prob",
+    estimator="mean",
+    errorbar="ci",
+    palette="viridis",
+    facet_kws={"sharey": False},
+)
+g.set(xscale="log", ylabel=r"$\operatorname{pass@k}$", yscale="log")
+g.set_titles(col_template=r"True $p$: {col_name}")
+sns.move_legend(g, "upper left", bbox_to_anchor=(1.0, 1.04))
+src.plot.save_plot_with_multiple_extensions(
+    plot_dir=results_dir,
+    plot_filename="y=pass_at_k_x=k_hue=n_style=type_col=true_prob",
+)
+# plt.show()
 
 print()
