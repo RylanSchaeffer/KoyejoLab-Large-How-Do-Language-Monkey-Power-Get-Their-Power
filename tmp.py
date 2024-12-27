@@ -1,110 +1,114 @@
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 import numpy as np
-from scipy import integrate
-import scipy.special
-import seaborn as sns
+import os
 import pandas as pd
-from tqdm import tqdm
-import warnings
+import pprint
+from scipy.optimize import minimize
+import scipy.stats
+import seaborn as sns
+from typing import Any, Dict, List, Tuple
 
 import src.analyze
 
 
-def compute_integral(k, alpha, beta, c, debug=False):
-    """
-    Compute the integral using adaptive quadrature with improved error handling
-    """
-    if not (0 < c < 1 and alpha > 0 and beta > 0):
-        return np.nan
+large_language_monkeys_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_original_pass_at_k_df(
+    refresh=False,
+    # refresh=True,
+)
 
-    # Use a smaller absolute tolerance and increase max evaluations
-    result, error = integrate.quad(
-        beta_three_parameter_distribution_integrand,
-        0.0,
-        c,
-        args=(k, alpha, beta, c),
-        epsabs=1e-10,
-        epsrel=1e-8,
-        limit=500,
+large_language_monkeys_pass_at_1_df = large_language_monkeys_pass_at_k_df[
+    (large_language_monkeys_pass_at_k_df["Scaling Parameter"] == 1)
+    & (large_language_monkeys_pass_at_k_df["Model"] == "Pythia 12B")
+    & (large_language_monkeys_pass_at_k_df["Benchmark"] == "MATH")
+].copy()
+
+
+def estimate_params(data, n):
+    # Inputs:
+    # data: an 1-D array of length number of problems
+    # each entry in data should give the number of correct answers
+    # n: an integer representing the number of attempts per problem
+
+    # Outputs:
+    # alpha and beta: floats representing the MLEs for alpha and beta
+
+    # define the nll of the distribution
+    def nll(params):
+        # Inputs:
+        # a, b: floats: alpha, beta for negative binomial distribution
+        # Outputs:
+        # float: the mean nll
+        a, b = params
+        fit_dist = scipy.stats.betabinom(n, a, b)
+        pdf_values = fit_dist.logpmf(data)
+        return -pdf_values.mean()
+
+    # initialize a random guess for alpha and beta
+    initial_guess = [np.random.rand(), np.random.rand()]
+
+    # minimize the nll
+    result = minimize(nll, initial_guess)
+    fitted_params = result.x
+    return fitted_params
+
+
+def estimate_params_with_scale(data, n):
+    # Inputs:
+    # data: an 1-D array of length number of problems
+    # each entry in data should give the number of correct answers
+    # n: an integer representing the number of attempts per problem
+
+    # Outputs:
+    # alpha and beta: floats representing the MLEs for alpha and beta
+
+    # define the nll of the distribution
+    def nll(params):
+        # Inputs:
+        # a, b: floats: alpha, beta for negative binomial distribution
+        # Outputs:
+        # float: the mean nll
+        a, b, scale = params
+
+        def integrand(p):
+            return scipy.stats.binom.pmf(data, n, p) * scipy.stats.beta.pdf(
+                p, a, b, scale=scale
+            )
+
+        nums = scipy.integrate.quad_vec(integrand, 0, 1)[0]
+        return -np.log(nums).mean()
+
+    # initialize a random guess for alpha and beta
+    initial_guess = [np.random.rand(), np.random.rand(), max(data / n) + 0.0001]
+
+    # minimize the nll
+    result = minimize(
+        nll,
+        initial_guess,
+        bounds=((0, float("inf")), (0, float("inf")), (max(data) / n, 1)),
+        method="L-BFGS-B",
+        options=dict(
+            maxiter=5000,
+            maxls=100,
+            gtol=1e-6,  # Gradient tolerance, adjust as needed),
+        ),
     )
-
-    # Check if result is reasonable
-    if not np.isfinite(result) or error > 1e-3 * abs(result):
-        return np.nan
-
-    return result
+    fitted_params = result.x
+    return fitted_params
 
 
-# Parameter ranges - reduced for initial testing
-k_values = np.logspace(0, 5, 20, dtype=int).tolist()[::-1]  # Reduced number of points
-alpha_values = np.array([0.1, 0.2, 0.3, 0.6])
-beta_values = np.array([1.5, 2.0, 2.5, 3.0, 3.5, 4.0])
-c_values = np.array([0.01, 0.1, 0.5])
+data = large_language_monkeys_pass_at_1_df["Num. Samples Correct"].values.astype(int)
+params = estimate_params_with_scale(data=data, n=10000)
 
-# Create parameter combinations with debugging for first few cases
-results = []
-debug_first_n = 5  # Number of cases to debug
-total_count = 0
 
-for k in tqdm(k_values, desc="Processing k values"):
-    for alpha in alpha_values:
-        for beta in beta_values:
-            for c in c_values:
-                debug = total_count < debug_first_n
-                integral_value = compute_integral(k, alpha, beta, c, debug=debug)
-                results.append(
-                    {
-                        "k": k,
-                        "alpha": alpha,
-                        "beta": beta,
-                        "c": c,
-                        "integral_value": integral_value,
-                    }
-                )
-                total_count += 1
+# Compute the beta distribution using the fitted parameters.
+x = np.linspace(0.0, 1.0, 100000)
+p_x = scipy.stats.beta.pdf(x, params[0], params[1], scale=params[2])
 
-# Create DataFrame
-df = pd.DataFrame(results)
-
-# Sort by parameters
-df = df.sort_values(["k", "alpha", "beta", "c"]).reset_index(drop=False)
-
-# Display first few rows and basic statistics
-print("\nFirst few rows of the results:")
-print(df.head().to_string())
-
-print("\nSummary statistics:")
-print(df["integral_value"].describe())
+print()
 
 plt.close()
-sns.relplot(
-    data=df,
-    kind="line",
-    x="k",
-    y="integral_value",
-    hue="alpha",
-    col="c",
-    style="beta",
-)
-plt.yscale("log")
+plt.plot(x, p_x)
 plt.xscale("log")
-plt.xlabel("k")
-plt.ylabel("Integral Value")
-# plt.show()
-
-
-(
-    _,
-    fitted_power_law_parameters_df,
-) = src.analyze.fit_power_law(
-    df,
-    covariate_col="k",
-    target_col="integral_value",
-    groupby_cols=["alpha", "beta", "c"],
-)
-
-
-# Count NaN values
-nan_count = df["integral_value"].isna().sum()
-total_count = len(df)
-print(f"\nNaN values: {nan_count}/{total_count} ({100*nan_count/total_count:.1f}%)")
+plt.yscale("log")
+plt.show()

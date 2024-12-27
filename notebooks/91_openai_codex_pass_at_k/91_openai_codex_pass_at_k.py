@@ -98,8 +98,8 @@ g = sns.relplot(
     palette="cool",
     facet_kws={"sharey": False},
 )
-g.set(xscale="log", ylabel=r"$\operatorname{pass@k}$", yscale="log")
-g.set_titles(col_template=r"True $p$: {col_name}")
+g.set(xscale="log", ylabel=r"$\operatorname{pass_i@k}$", yscale="log")
+g.set_titles(col_template=r"True $\operatorname{{pass_i@1}}$: {col_name}")
 sns.move_legend(g, "upper left", bbox_to_anchor=(1.0, 1.04))
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
@@ -123,8 +123,8 @@ g = sns.relplot(
     palette="viridis",
     facet_kws={"sharey": False},
 )
-g.set(xscale="log", ylabel=r"$\operatorname{pass@k}$", yscale="log")
-g.set_titles(col_template=r"True $p$: {col_name}")
+g.set(xscale="log", ylabel=r"$\operatorname{pass_i@k}$", yscale="log")
+g.set_titles(col_template=r"True $\operatorname{{pass_i@1}}$: {col_name}")
 sns.move_legend(g, "upper left", bbox_to_anchor=(1.0, 1.04))
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
@@ -132,4 +132,4 @@ src.plot.save_plot_with_multiple_extensions(
 )
 # plt.show()
 
-print()
+print("Finished notebooks/91_openai_codex_pass_at_k!")

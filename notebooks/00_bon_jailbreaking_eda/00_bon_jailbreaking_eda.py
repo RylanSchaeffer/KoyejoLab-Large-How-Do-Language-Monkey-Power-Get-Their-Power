@@ -35,7 +35,7 @@ g = sns.lineplot(
 g.set(
     title="Best-of-N Jailbreaking",
     xlabel=r"Num. Attempts per Prompt $k$",
-    ylabel="Attack Success Rate",
+    ylabel=r"$\operatorname{ASR_{\mathcal{D}}@k}$",
     ylim=(-0.05, 1.05),
 )
 sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
@@ -94,7 +94,7 @@ g.set(
     yscale="log",
     ylim=(3e-2, 8e0),
     xlabel=r"Num. Attempts per Prompt $k$",
-    ylabel=r"$-\log (\mathbb{E}[\text{ASR@k}])$",
+    ylabel=r"$-\log (\operatorname{ASR_{\mathcal{D}}@k})$",
 )
 sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
 src.plot.save_plot_with_multiple_extensions(
@@ -120,7 +120,7 @@ g = sns.relplot(
 )
 g.set(
     xscale="log",
-    ylabel="ASR@k",
+    ylabel=r"$\operatorname{ASR_i@k}$",
     xlabel=r"Num. Attempts per Prompt $k$",
 )
 # Move legend to the empty subplot position
@@ -152,7 +152,7 @@ g.set(
     xscale="log",
     yscale="log",
     ylim=(1e-2, 1e1),
-    ylabel=r"$-\log(\text{ASR@k})$",
+    ylabel=r"$-\log(\operatorname{ASR_i@k})$",
     xlabel=r"Num. Attempts per Prompt $k$",
 )
 # Move legend to the empty subplot position
@@ -197,7 +197,7 @@ g = sns.displot(
 g.set(
     xscale="log",
     ylabel="Count",
-    xlabel=r"$\operatorname{ASR@1}$",
+    xlabel=r"$\operatorname{ASR_i@1}$",
 )
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))

@@ -45,7 +45,7 @@ bon_jailbreaking_pass_at_1_kumaraswamy_fits_df = (
     bon_jailbreaking_pass_at_1_df.groupby(["Model", "Modality", "Scaling Parameter"])
     .apply(
         lambda df: src.analyze.fit_pass_at_1_kumaraswamy_distribution_parameters(
-            data=df["Score"].values
+            pass_i_at_1_data=df["Score"].values
         )
     )
     .reset_index()
@@ -185,7 +185,7 @@ llmonkeys_pass_at_1_kumaraswamy_fits_df = (
     llmonkeys_original_pass_at_1_df.groupby(["Model", "Benchmark", "Scaling Parameter"])
     .apply(
         lambda df: src.analyze.fit_pass_at_1_kumaraswamy_distribution_parameters(
-            data=df["Score"].values
+            pass_i_at_1_data=df["Score"].values
         )
     )
     .reset_index()

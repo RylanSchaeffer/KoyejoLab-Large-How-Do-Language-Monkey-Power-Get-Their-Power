@@ -37,7 +37,7 @@ g.set(
     title="Large Language Monkeys",
     xscale="log",
     xlabel=r"Num. Attempts per Problem $k$",
-    ylabel=r"$\mathbb{E}[\operatorname{pass@k}]$",
+    ylabel=r"$\operatorname{pass_{\mathcal{D}}@k}$",
     ylim=(0.0, 1.0),
 )
 sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
@@ -95,7 +95,7 @@ g.set(
     yscale="log",
     ylim=(1e-1, None),
     xlabel=r"Num. Attempts per Problem $k$",
-    ylabel=r"$-\log (\mathbb{E}[\operatorname{pass@k}])$",
+    ylabel=r"$-\log (\operatorname{pass_{\mathcal{D}}@k})$",
 )
 sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
 src.plot.save_plot_with_multiple_extensions(
@@ -120,7 +120,7 @@ g = sns.relplot(
 )
 g.set(
     xscale="log",
-    ylabel=r"$\mathbb{E}[\operatorname{pass@k}]$",
+    ylabel=r"$\operatorname{pass_{i}@k}$",
     xlabel=r"Num. Attempts per Problem $k$",
 )
 # Move legend to the empty subplot position
@@ -152,7 +152,7 @@ g.set(
     xscale="log",
     yscale="log",
     ylim=(1e-2, 1e1),
-    ylabel=r"$-\log(\operatorname{pass@k})$",
+    ylabel=r"$-\log(\operatorname{pass_{i}@k})$",
     xlabel=r"Num. Attempts per Problem $k$",
 )
 # Move legend to the empty subplot position
@@ -197,7 +197,7 @@ g = sns.displot(
 g.set(
     xscale="log",
     ylabel="Count",
-    xlabel="pass@1",
+    xlabel=r"$\operatorname{pass_i@1}$",
 )
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))

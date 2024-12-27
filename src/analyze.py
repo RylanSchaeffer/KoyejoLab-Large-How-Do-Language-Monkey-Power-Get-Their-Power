@@ -111,7 +111,7 @@ def compute_discretized_neg_log_likelihood(
         assert not np.isnan(b)
 
         cdf_values = scipy.stats.beta.cdf(bins, a, b, loc=0.0, scale=data.max())
-        prob_mass = np.diff(cdf_values) + epsilon
+        prob_mass_per_bin = np.diff(cdf_values) + epsilon
     elif distribution == "continuous_bernoulli":
         lam = params
         assert not np.isnan(lam)
@@ -123,7 +123,7 @@ def compute_discretized_neg_log_likelihood(
             )
             cdf_values /= 2.0 * lam - 1
 
-        prob_mass = np.diff(cdf_values) + epsilon
+        prob_mass_per_bin = np.diff(cdf_values) + epsilon
     elif distribution == "kumaraswamy":
         a, b = params
         assert not np.isnan(a)
@@ -135,32 +135,32 @@ def compute_discretized_neg_log_likelihood(
         #   F(x) = 1 - (1 - (x / scale)^a)^b
         data = data / (data.max() + epsilon)
         cdf_values = 1.0 - np.power(1.0 - np.power(bins, a), b)
-        prob_mass = np.diff(cdf_values) + epsilon
+        prob_mass_per_bin = np.diff(cdf_values) + epsilon
 
     elif distribution == "lognormal":
         raise NotImplementedError
     else:
         raise ValueError(f"Unknown distribution: {distribution}")
 
-    assert np.all(prob_mass >= 0.0)
-    log_prob_mass = np.log(prob_mass)
+    assert np.all(prob_mass_per_bin >= 0.0)
+
+    # 1.5 Compute the log of the probability mass per bin.
+    log_prob_mass_per_bin = np.log(prob_mass_per_bin)
 
     # 2. Bin the data
     num_data_per_bin = np.histogram(data, bins)[0]
 
     # 3. Compute the total log likelihood
-    log_likelihood = np.mean(np.multiply(num_data_per_bin, log_prob_mass))
+    discretized_log_likelihood = np.mean(
+        np.multiply(num_data_per_bin, log_prob_mass_per_bin)
+    )
 
     # 4. Return the negative log likelihood.
-    neg_log_likelihood = -log_likelihood
+    neg_discretized_log_likelihood = -discretized_log_likelihood
 
-    # print("alpha: ", a)
-    # print("beta: ", b)
-    # print("NLL: ", neg_log_likelihood)
-    # print("\n\n")
-    assert not np.isinf(neg_log_likelihood)
+    assert not np.isinf(neg_discretized_log_likelihood)
 
-    return neg_log_likelihood
+    return neg_discretized_log_likelihood
 
 
 def compute_scaling_exponent_from_distributional_fit(
@@ -915,8 +915,6 @@ def estimate_pass_at_k(
     def estimator(n: int, c: int, k: int) -> float:
         """
         Calculates 1 - comb(n - c, k) / comb(n, k).
-
-
         """
         assert n >= c
         if (n - c) < k:
@@ -1041,7 +1039,7 @@ def fit_pass_at_1_continuous_bernoulli_distribution_parameters(
 
 
 def fit_pass_at_1_kumaraswamy_distribution_parameters(
-    data: np.ndarray,
+    pass_i_at_1_data: np.ndarray,  # Shape: (num of problems,)
     resolution: float = 1e-4,
     initial_params: Tuple[float, float] = (0.9, 5.1),
     bounds: Tuple[Tuple[float, float]] = ((0.01, 100), (0.01, 100)),
@@ -1059,13 +1057,13 @@ def fit_pass_at_1_kumaraswamy_distribution_parameters(
         [[-small_value_for_plotting], [small_value_for_plotting], log_bins]
     )
     bins[0] = 0.0
-    assert data.min() >= bins[0]
-    assert data.max() < bins[-1]
+    assert pass_i_at_1_data.min() >= bins[0]
+    assert pass_i_at_1_data.max() < bins[-1]
 
     # Maximize the log likelihood by minimizing its negative
     optimize_result = scipy.optimize.minimize(
         lambda params: compute_discretized_neg_log_likelihood(
-            params, data=data, bins=bins, distribution="kumaraswamy"
+            params, data=pass_i_at_1_data, bins=bins, distribution="kumaraswamy"
         ),
         x0=initial_params,
         bounds=bounds,
@@ -1082,10 +1080,11 @@ def fit_pass_at_1_kumaraswamy_distribution_parameters(
             "a": optimize_result.x[0],
             "b": optimize_result.x[1],
             "loc": 0.0,
-            "scale": data.max(),
+            "scale": pass_i_at_1_data.max(),
             "neg_log_likelihood": optimize_result.fun,
             "aic": 2 * len(initial_params) + 2 * optimize_result.fun,
-            "bic": len(initial_params) * np.log(len(data)) + 2 * optimize_result.fun,
+            "bic": len(initial_params) * np.log(len(pass_i_at_1_data))
+            + 2 * optimize_result.fun,
         }
     )
 

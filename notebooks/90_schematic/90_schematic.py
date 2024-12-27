@@ -57,7 +57,7 @@ ax1.set(
     yscale="log",
     ylim=(1e-3, 3.162e1),
     xlabel=r"Number of Attempts $k$",
-    ylabel=r"$-\log(\mathbb{E}[\operatorname{pass@k}])$",
+    ylabel=r"$-\log(\operatorname{pass_{\mathcal{D}}@k})$",
 )
 
 # Second subplot - Pass@k for different pass@1 values
@@ -76,7 +76,7 @@ ax2.set(
     xlim=(1, k.max()),
     ylim=(1e-3, 3.162e1),
     xlabel=r"Number of Attempts $k$",
-    ylabel=r"$-\log (\operatorname{pass@k})$",
+    ylabel=r"$-\log (\operatorname{pass_i@k})$",
 )
 
 # Third subplot - Expected pass@k
@@ -95,9 +95,9 @@ sns.scatterplot(
 ax3.set(
     xscale="log",
     xlim=(1e-5, 1.0),
-    xlabel=r"$\operatorname{pass@1}$",
+    xlabel=r"$\operatorname{pass_i@1}$",
     ylim=(1e-2, None),
-    ylabel=r"$p(\operatorname{pass@1})$",
+    ylabel=r"$p_{\mathcal{D}}(\operatorname{pass_i@1})$",
 )
 
 # Add equals sign between ax1 and ax2
