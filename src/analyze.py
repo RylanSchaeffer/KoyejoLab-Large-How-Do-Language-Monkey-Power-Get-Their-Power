@@ -109,6 +109,8 @@ def compute_discretized_neg_log_likelihood(
         a, b = params
         assert not np.isnan(a)
         assert not np.isnan(b)
+        if data.max() == 0:
+            raise ValueError("Data is all zeros.")
 
         cdf_values = scipy.stats.beta.cdf(bins, a, b, loc=0.0, scale=data.max())
         prob_mass_per_bin = np.diff(cdf_values) + epsilon
@@ -219,6 +221,34 @@ def compute_scaling_exponent_from_distributional_fit(
         raise ValueError(f"Unknown distribution: {distribution}")
 
     return distributional_fit_df
+
+
+def compute_pass_at_k_from_individual_outcomes(
+    individual_outcomes_per_problem: np.ndarray,
+    ks_list: List[int],
+) -> pd.DataFrame:
+    num_problems, num_samples_per_problem = individual_outcomes_per_problem.shape
+    pass_at_k_dfs_list = []
+    num_samples_total = np.full(num_problems, fill_value=num_samples_per_problem)
+    num_samples_correct = individual_outcomes_per_problem.sum(axis=1)
+    for k in ks_list:
+        pass_at_k = src.analyze.estimate_pass_at_k(
+            num_samples_total=num_samples_total,
+            num_samples_correct=num_samples_correct,
+            k=k,
+        )
+        pass_at_k_df = pd.DataFrame(
+            {
+                "Score": pass_at_k,
+                "Scaling Parameter": k,
+                "Problem Idx": np.arange(num_problems),
+            }
+        )
+        pass_at_k_dfs_list.append(pass_at_k_df)
+    pass_at_k_df = pd.concat(pass_at_k_dfs_list)
+    # Drop any NaN scores.
+    pass_at_k_df.dropna(subset=["Score"], inplace=True)
+    return pass_at_k_df
 
 
 def create_or_load_beta_distributions_pdf_df(
@@ -903,6 +933,189 @@ def create_or_load_pretraining_probability_df(
     return pretraining_probability_df
 
 
+def create_or_load_synthetic_scaling_coefficient_data_df(
+    raw_data_dir=f"{os.getcwd()}/data/raw_data",
+    processed_data_dir=f"{os.getcwd()}/data/processed_data",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    synthetic_scaling_exponents_data_path = os.path.join(
+        processed_data_dir, "synthetic_scaling_coefficient.parquet"
+    )
+
+    if refresh or not os.path.exists(synthetic_scaling_exponents_data_path):
+        print(f"Creating {synthetic_scaling_exponents_data_path} anew...")
+        os.makedirs(processed_data_dir, exist_ok=True)
+
+        # High level sketch:
+        # 1. Generate synthetic data, sweeping over multiple true distributions and distributional parameters.
+        # 2. Sweep over the number of samples per problem, computing pass_i@k for many k.
+        # 3. Fit the distributional parameters to the synthetic data.
+        # 4. Compute the scaling exponent from the distributional fits.
+
+        true_distribution_to_params_dict = {
+            "beta": [
+                {"a": 0.05, "b": 1.5},
+                {"a": 0.05, "b": 5.0},
+                {"a": 0.1, "b": 1.5},
+                {"a": 0.1, "b": 5.0},
+            ],
+            # "scaled_beta": [
+            #     {"a": 0.5, "b": 1.0, "scale": 0.05},
+            #     {"a": 0.5, "b": 1.0, "scale": 0.1},
+            #     {"a": 0.5, "b": 5.0, "scale": 0.1},
+            #     {"a": 0.5, "b": 1.0, "scale": 0.05},
+            #     {"a": 0.5, "b": 1.0, "scale": 0.5},
+            #     {"a": 0.5, "b": 5.0, "scale": 0.5},
+            # ],
+        }
+        num_problems_list: List[int] = [
+            64,
+            128,
+            256,
+        ]
+        num_samples_per_problem_list: List[int] = [
+            100,
+            316,
+            1000,
+            3162,
+            10000,
+            31623,
+        ]
+        max_num_samples_per_problem = max(num_samples_per_problem_list)
+        num_repeats = 30
+
+        scaling_exponents_dfs_list = []
+        for distribution in true_distribution_to_params_dict:
+            for distribution_params in true_distribution_to_params_dict[distribution]:
+                if distribution == "beta":
+                    theoretical_scaling_exponent = distribution_params["a"]
+                else:
+                    raise NotImplementedError(f"Unknown distribution: {distribution}")
+
+                for num_problems, repeat_idx in itertools.product(
+                    num_problems_list, range(num_repeats)
+                ):
+                    # Shape: (num_problems, max num samples per problem)
+                    individual_outcomes_per_problem = (
+                        src.analyze.sample_synthetic_individual_outcomes_per_problem(
+                            num_problems=num_problems,
+                            num_samples_per_problem=max_num_samples_per_problem,
+                            distribution=distribution,
+                            distribution_parameters=distribution_params,
+                        )
+                    )
+
+                    for num_samples_per_problem in num_samples_per_problem_list:
+                        subset_individual_outcomes_per_problem = (
+                            individual_outcomes_per_problem[:, :num_samples_per_problem]
+                        )
+
+                        pass_at_k_df = src.analyze.compute_pass_at_k_from_individual_outcomes(
+                            individual_outcomes_per_problem=subset_individual_outcomes_per_problem,
+                            ks_list=src.globals.BON_JAILBREAKING_Ks_LIST,
+                        )
+
+                        # Extract pass_i@1 and then fit the distributional parameters.
+                        pass_at_1_df = pass_at_k_df[
+                            pass_at_k_df["Scaling Parameter"] == 1
+                        ]
+                        beta_fitted_power_law_parameters_df = (
+                            src.analyze.fit_pass_at_1_beta_distribution_parameters(
+                                data=pass_at_1_df["Score"].values,
+                                resolution=1.0 / num_samples_per_problem,
+                            )
+                        )
+
+                        avg_pass_at_k_df = (
+                            pass_at_k_df.groupby("Scaling Parameter")["Score"]
+                            .mean()
+                            .reset_index()
+                        )
+                        avg_pass_at_k_df["Neg Log Score"] = -np.log(
+                            avg_pass_at_k_df["Score"]
+                        )
+                        avg_pass_at_k_df["Placeholder"] = "Placeholder"
+                        (
+                            _,
+                            least_sqrs_fitted_power_law_parameters_df,
+                        ) = src.analyze.fit_power_law(
+                            df=avg_pass_at_k_df,
+                            covariate_col="Scaling Parameter",
+                            target_col="Neg Log Score",
+                            groupby_cols=["Placeholder"],
+                        )
+
+                        scaling_exponents_dfs_list.append(
+                            pd.DataFrame(
+                                {
+                                    "Distribution": [distribution],
+                                    "Distribution Parameters": [
+                                        str(distribution_params)
+                                    ],  # Can't hash a dict, so convert it to a string.
+                                    "Num. Problems": num_problems,
+                                    r"Num. Samples per Problem ($n$)": [
+                                        num_samples_per_problem
+                                    ],
+                                    "Fit Scaling Exponent": [
+                                        least_sqrs_fitted_power_law_parameters_df[
+                                            "b"
+                                        ].values[0]
+                                    ],
+                                    "Fit Method": "Least Squares",
+                                    "Theoretical Scaling Exponent": [
+                                        theoretical_scaling_exponent
+                                    ],
+                                    "Repeat Index": [repeat_idx],
+                                }
+                            )
+                        )
+
+                        scaling_exponents_dfs_list.append(
+                            pd.DataFrame(
+                                {
+                                    "Distribution": [distribution],
+                                    "Distribution Parameters": [
+                                        str(distribution_params)
+                                    ],  # Can't hash a dict, so convert it to a string.
+                                    "Num. Problems": num_problems,
+                                    r"Num. Samples per Problem ($n$)": [
+                                        num_samples_per_problem
+                                    ],
+                                    "Fit Scaling Exponent": [
+                                        beta_fitted_power_law_parameters_df["alpha"]
+                                    ],
+                                    "Fit Method": "Distribution",
+                                    "Theoretical Scaling Exponent": [
+                                        theoretical_scaling_exponent
+                                    ],
+                                    "Repeat Index": [repeat_idx],
+                                }
+                            )
+                        )
+
+        synthetic_scaling_exponents_df = pd.concat(
+            scaling_exponents_dfs_list, ignore_index=True
+        ).reset_index(drop=True)
+        synthetic_scaling_exponents_df[r"$(\beta - \hat{\beta})^2$"] = 0.5 * np.square(
+            synthetic_scaling_exponents_df["Fit Scaling Exponent"]
+            - synthetic_scaling_exponents_df["Theoretical Scaling Exponent"]
+        )
+        synthetic_scaling_exponents_df.to_parquet(
+            path=synthetic_scaling_exponents_data_path
+        )
+        del synthetic_scaling_exponents_df
+
+    synthetic_scaling_exponents_df = pd.read_parquet(
+        synthetic_scaling_exponents_data_path
+    )
+
+    print(
+        f"Loaded {synthetic_scaling_exponents_data_path} with shape: ",
+        synthetic_scaling_exponents_df.shape,
+    )
+    return synthetic_scaling_exponents_df
+
+
 def estimate_pass_at_k(
     num_samples_total: Union[int, List[int], np.ndarray],
     num_samples_correct: Union[List[int], np.ndarray],
@@ -917,7 +1130,9 @@ def estimate_pass_at_k(
         Calculates 1 - comb(n - c, k) / comb(n, k).
         """
         assert n >= c
-        if (n - c) < k:
+        if n < k:
+            return np.nan
+        elif (n - c) < k:
             return 1.0
         return 1.0 - np.prod(1.0 - k / np.arange(n - c + 1, n + 1))
 
@@ -954,7 +1169,7 @@ def fit_pass_at_1_beta_distribution_parameters(
     )
     bins[0] = 0.0
     assert data.min() >= bins[0]
-    assert data.max() < bins[-1]
+    assert (data.max() < bins[-1]) or data.max() == 1.0
 
     # Maximize the log likelihood by minimizing its negative
     optimize_result = scipy.optimize.minimize(
@@ -1232,9 +1447,20 @@ def fit_power_law(
         return np.sum(np.power(y - predicted, 2.0))
 
     def fit_group(group_df):
+        x = group_df[covariate_col]
+        y = group_df[target_col]
+
+        # Exclude any np.inf or np.nan values
+        mask = np.isfinite(x) & np.isfinite(y)
+        x = x[mask]
+        y = y[mask]
+
+        if len(x) == 0:
+            raise ValueError("No valid data points to fit the power law model")
+
         # Log transform the data
-        log_x = np.log(group_df[covariate_col])
-        log_y = np.log(group_df[target_col])
+        log_x = np.log(x)
+        log_y = np.log(y)
 
         # Initial guess using linear regression
         x_mean = log_x.mean()
@@ -1286,3 +1512,30 @@ def fit_power_law(
     fitted_power_law_parameters_df.reset_index(inplace=True)
 
     return df_with_predictions, fitted_power_law_parameters_df
+
+
+def sample_synthetic_individual_outcomes_per_problem(
+    num_problems: int,
+    num_samples_per_problem: int,
+    distribution: str,
+    distribution_parameters: Dict[str, float],
+) -> np.ndarray:
+    if distribution == "beta":
+        true_pass_at_1_per_problem = scipy.stats.beta.rvs(
+            a=distribution_parameters["a"],
+            b=distribution_parameters["b"],
+            loc=distribution_parameters.get("loc", 0.0),
+            scale=distribution_parameters.get("scale", 1.0),
+            size=(num_problems,),
+        )
+        # Shape: (num_problems, num_samples_per_problem)
+        individual_outcomes = scipy.stats.bernoulli.rvs(
+            p=true_pass_at_1_per_problem,
+            size=(num_samples_per_problem, num_problems),
+        ).T
+    elif distribution == "kumaraswamy":
+        raise NotImplementedError
+    else:
+        raise NotImplementedError
+
+    return individual_outcomes
