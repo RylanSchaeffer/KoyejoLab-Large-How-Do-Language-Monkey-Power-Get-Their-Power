@@ -141,7 +141,7 @@ fig.text(
 fig.text(
     0.82,
     0.71,
-    r"$p_{\mathcal{D}}(\operatorname{pass_i@k}) \\ \text{    } \propto  (\operatorname{pass_i@k})^{b-1}$",
+    r"$p_{\mathcal{D}}(\operatorname{pass_i@1}) \\ \text{    } \propto  (\operatorname{pass_i@1})^{b-1}$",
     fontsize=30,
     ha="center",
     va="center",
