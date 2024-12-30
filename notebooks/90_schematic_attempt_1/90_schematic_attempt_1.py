@@ -56,6 +56,7 @@ ax1.set(
     ylim=(3.162e-2, 1.5e1),
     xlabel=r"Number of Attempts $k$",
     ylabel=r"$-\log(\operatorname{pass_{\mathcal{D}}@k})$",
+    title="Average Power Law Scaling",
 )
 # Second subplot - Pass@k for different pass@1 values
 ax2 = fig.add_subplot(132)
@@ -84,6 +85,7 @@ ax2.set(
     ylim=(3.162e-2, 1.5e1),
     xlabel=r"Number of Attempts $k$",
     ylabel=r"$-\log (\operatorname{pass_i@k})$",
+    title="Per-Problem Exponential Scaling",
 )
 # Third subplot - Expected pass@k
 ax3 = fig.add_subplot(133)
@@ -120,16 +122,17 @@ ax3.set(
     ylim=(3.162e-2, 1.5e1),
     ylabel=r"$p_{\mathcal{D}}(\operatorname{pass_i@1})$",
     yscale="log",
+    title="Distribution of Per-Problem Pass@1",
 )
 ax3.axvline(3.162e-2, color="k", linestyle="--")
 # Add equals sign between ax1 and ax2
-fig.text(0.335, 0.55, "=", fontsize=40, ha="center", va="center")
+fig.text(0.35, 0.92, "=", fontsize=40, ha="center", va="center")
 # Add plus sign between ax2 and ax3
-fig.text(0.67, 0.55, "+", fontsize=40, ha="center", va="center")
+fig.text(0.69, 0.92, "+", fontsize=40, ha="center", va="center")
 # Create text in axes.
 fig.text(
     0.20,
-    0.78,
+    0.72,
     r"$-\log(\operatorname{pass_{\mathcal{D}}@k}) \propto k^{-b}$",
     fontsize=30,
     ha="center",
@@ -137,7 +140,7 @@ fig.text(
 )
 fig.text(
     0.82,
-    0.76,
+    0.71,
     r"$p_{\mathcal{D}}(\operatorname{pass_i@k}) \\ \text{    } \propto  (\operatorname{pass_i@k})^{b-1}$",
     fontsize=30,
     ha="center",
