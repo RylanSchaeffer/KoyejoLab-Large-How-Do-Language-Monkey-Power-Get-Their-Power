@@ -2,6 +2,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from datasets import load_dataset
 from functools import partial
 import itertools
+import mpmath as mp
 import numpy as np
 import os
 import pandas as pd
@@ -16,6 +17,62 @@ import src.globals
 # This helps print more columns.
 pd.set_option("display.width", 1000)
 pd.set_option("display.expand_frame_repr", False)
+
+
+def compute_beta_binomial_three_parameter_distribution_integrand(
+    p: float, n: np.ndarray, k: np.ndarray, alpha: float, beta: float, scale: float
+) -> float:
+    # Convert everything to mpmath types for extreme precision.
+    p = mp.mpf(p)
+    alpha = mp.mpf(alpha)
+    beta = mp.mpf(beta)
+    scale = mp.mpf(scale)
+
+    if p <= 0 or p >= scale:
+        return mp.mpf("0")
+
+    log_scaled_beta: float = scipy.stats.beta.logpdf(
+        p, alpha, beta, loc=0.0, scale=scale
+    )
+    # Shape: (num of problems,)
+    log_binomials: np.ndarray = scipy.stats.binom.logpmf(k=k, n=n, p=p)
+    log_result = log_scaled_beta + np.sum(log_binomials)
+    return mp.e ** (log_result)
+
+
+def compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
+    params: Tuple[int, int, float, float],
+    num_samples: np.ndarray,
+    num_successes: np.ndarray,
+) -> float:
+    alpha, beta, scale = params
+
+    # Use a smaller absolute tolerance and increase max evaluations
+    likelihood, error = integrate.quad(
+        compute_beta_binomial_three_parameter_distribution_integrand,
+        0.0,
+        scale,
+        args=(num_samples, num_successes, alpha, beta, scale),
+        epsabs=1e-12,
+        epsrel=1e-10,
+        limit=5000,
+    )
+    # Check if result is reasonable
+    if not np.isfinite(likelihood):
+        raise ValueError("Likelihood is not finite.")
+    neg_log_likelihood = -np.log(likelihood)
+    return neg_log_likelihood
+
+
+def compute_beta_binomial_two_parameters_negative_log_likelihood(
+    params: Tuple[float, float],
+    num_samples: np.ndarray,
+    num_successes: np.ndarray,
+) -> float:
+    log_pmf = scipy.stats.betabinom.logpmf(
+        k=num_successes, n=num_samples, a=params[0], b=params[1]
+    ).sum()
+    return -log_pmf
 
 
 def compute_beta_three_parameter_distribution_integrand(
@@ -251,6 +308,44 @@ def compute_pass_at_k_from_individual_outcomes(
     return pass_at_k_df
 
 
+def convert_individual_outcomes_to_num_samples_and_num_successes(
+    individual_outcomes_df: pd.DataFrame,
+    groupby_cols: List[str],
+) -> pd.DataFrame:
+    num_samples_and_num_successes_df = (
+        individual_outcomes_df.groupby(
+            groupby_cols,
+        )
+        .agg(
+            {
+                "Score": ["size", "sum"],
+            }
+        )
+        .reset_index()
+    )
+
+    # Clean up columns.
+    num_samples_and_num_successes_df.columns = [
+        "".join(col).strip() if isinstance(col, tuple) else col
+        for col in num_samples_and_num_successes_df.columns
+    ]
+    num_samples_and_num_successes_df.rename(
+        columns={
+            "Scoresize": "Num. Samples Total",
+            "Scoresum": "Num. Samples Correct",
+        },
+        inplace=True,
+    )
+    # Make sure both columns are floats.
+    num_samples_and_num_successes_df[
+        "Num. Samples Total"
+    ] = num_samples_and_num_successes_df["Num. Samples Total"].astype(float)
+    num_samples_and_num_successes_df[
+        "Num. Samples Correct"
+    ] = num_samples_and_num_successes_df["Num. Samples Correct"].astype(float)
+    return num_samples_and_num_successes_df
+
+
 def create_or_load_beta_distributions_pdf_df(
     raw_data_dir=f"{os.getcwd()}/data/raw_data",
     processed_data_dir=f"{os.getcwd()}/data/processed_data",
@@ -293,17 +388,17 @@ def create_or_load_beta_distributions_pdf_df(
     return beta_distributions_pdf_df
 
 
-def create_or_load_bon_jailbreaking_pass_at_k_df(
+def create_or_load_bon_jailbreaking_individual_outcomes_df(
     raw_data_dir=f"{os.getcwd()}/data/raw_data",
     processed_data_dir=f"{os.getcwd()}/data/processed_data",
     refresh: bool = False,
 ) -> pd.DataFrame:
-    bon_jailbreaking_pass_at_k_df_path = os.path.join(
-        processed_data_dir, "bon_jailbreaking_pass_at_k.parquet"
+    bon_jailbreaking_individual_outcomes_df_path = os.path.join(
+        processed_data_dir, "bon_jailbreaking_individual_outcomes.parquet"
     )
 
-    if refresh or not os.path.exists(bon_jailbreaking_pass_at_k_df_path):
-        print("Creating bon_jailbreaking_pass_at_k_df_path anew...")
+    if refresh or not os.path.exists(bon_jailbreaking_individual_outcomes_df_path):
+        print(f"Creating {bon_jailbreaking_individual_outcomes_df_path} anew...")
 
         os.makedirs(processed_data_dir, exist_ok=True)
         bon_jailbreaking_dir = os.path.join(raw_data_dir, "best_of_n_jailbreaking")
@@ -344,13 +439,54 @@ def create_or_load_bon_jailbreaking_pass_at_k_df(
             df["Temperature"] = temperature
             best_of_n_jailbreaking_dfs_list.append(df)
 
-        best_of_n_jailbreaking_df = pd.concat(best_of_n_jailbreaking_dfs_list)
-        best_of_n_jailbreaking_df = best_of_n_jailbreaking_df[
-            best_of_n_jailbreaking_df["Temperature"] == 1.0
-        ]
+        best_of_n_jailbreaking_individual_outcomes_df = pd.concat(
+            best_of_n_jailbreaking_dfs_list
+        )
+        best_of_n_jailbreaking_individual_outcomes_df = (
+            best_of_n_jailbreaking_individual_outcomes_df[
+                best_of_n_jailbreaking_individual_outcomes_df["Temperature"] == 1.0
+            ]
+        )
+
+        best_of_n_jailbreaking_individual_outcomes_df.to_parquet(
+            bon_jailbreaking_individual_outcomes_df_path,
+            index=False,
+        )
+        print(f"Wrote {bon_jailbreaking_individual_outcomes_df_path} to disk.")
+        del best_of_n_jailbreaking_individual_outcomes_df
+
+    bon_jailbreaking_individual_outcomes_df = pd.read_parquet(
+        bon_jailbreaking_individual_outcomes_df_path
+    )
+    print(
+        f"Loaded {bon_jailbreaking_individual_outcomes_df_path} with shape: ",
+        bon_jailbreaking_individual_outcomes_df.shape,
+    )
+
+    return bon_jailbreaking_individual_outcomes_df
+
+
+def create_or_load_bon_jailbreaking_pass_at_k_df(
+    raw_data_dir=f"{os.getcwd()}/data/raw_data",
+    processed_data_dir=f"{os.getcwd()}/data/processed_data",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    bon_jailbreaking_pass_at_k_df_path = os.path.join(
+        processed_data_dir, "bon_jailbreaking_pass_at_k.parquet"
+    )
+
+    if refresh or not os.path.exists(bon_jailbreaking_pass_at_k_df_path):
+        print(f"Creating {bon_jailbreaking_pass_at_k_df_path} anew...")
+        bon_jailbreaking_individual_outcomes_df = (
+            create_or_load_bon_jailbreaking_individual_outcomes_df(
+                raw_data_dir=raw_data_dir,
+                processed_data_dir=processed_data_dir,
+                refresh=refresh,
+            )
+        )
 
         bon_jailbreaking_pass_at_k_df = (
-            best_of_n_jailbreaking_df.groupby(
+            bon_jailbreaking_individual_outcomes_df.groupby(
                 ["Model", "Modality", "Temperature", "Problem Idx"]
             )
             .agg(
@@ -373,21 +509,14 @@ def create_or_load_bon_jailbreaking_pass_at_k_df(
             inplace=True,
         )
 
-        models_gsm8k_pass_at_k_dfs_list = []
-        for k in src.globals.BON_JAILBREAKING_Ks_LIST:
-            models_math_scores_df_copy = bon_jailbreaking_pass_at_k_df.copy()
-            models_math_scores_df_copy["Scaling Parameter"] = k
-            models_math_scores_df_copy["Score"] = estimate_pass_at_k(
-                num_samples_total=bon_jailbreaking_pass_at_k_df[
-                    "Num. Samples Total"
-                ].values,
-                num_samples_correct=bon_jailbreaking_pass_at_k_df[
-                    "Num. Samples Correct"
-                ].values,
-                k=k,
-            )
-            models_gsm8k_pass_at_k_dfs_list.append(models_math_scores_df_copy)
-        bon_jailbreaking_pass_at_k_df = pd.concat(models_gsm8k_pass_at_k_dfs_list)
+        bon_jailbreaking_pass_at_k_df = compute_pass_at_k_from_individual_outcomes(
+            bon_jailbreaking_pass_at_k_df,
+            ks_list=src.globals.BON_JAILBREAKING_Ks_LIST,
+        )
+        bon_jailbreaking_pass_at_k_df.pivot(
+            id_vars=["Model", "Modality", "Temperature"],
+        )
+
         bon_jailbreaking_pass_at_k_df["Log Score"] = np.log(
             bon_jailbreaking_pass_at_k_df["Score"]
         )
@@ -404,7 +533,7 @@ def create_or_load_bon_jailbreaking_pass_at_k_df(
 
     models_gsm8k_pass_at_k_df = pd.read_parquet(bon_jailbreaking_pass_at_k_df_path)
     print(
-        "Loaded bon_jailbreaking_pass_at_k_df_path with shape: ",
+        f"Loaded {bon_jailbreaking_pass_at_k_df_path} with shape: ",
         models_gsm8k_pass_at_k_df.shape,
     )
     return models_gsm8k_pass_at_k_df
@@ -502,6 +631,88 @@ def create_or_load_large_language_monkeys_pass_at_k_df(
     return large_language_monkeys_pass_at_k_df
 
 
+def create_or_load_large_language_monkeys_original_individual_outcomes_df(
+    raw_data_dir=f"{os.getcwd()}/data/raw_data",
+    processed_data_dir=f"{os.getcwd()}/data/processed_data",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    large_language_monkeys_original_individual_outcomes_df_path = os.path.join(
+        processed_data_dir,
+        "large_language_monkeys_original_individual_outcomes.parquet",
+    )
+
+    if refresh or not os.path.exists(
+        large_language_monkeys_original_individual_outcomes_df_path
+    ):
+        print(
+            f"Creating {large_language_monkeys_original_individual_outcomes_df_path} anew..."
+        )
+
+        os.makedirs(processed_data_dir, exist_ok=True)
+        large_language_monkeys_original_dfs_list = []
+        subsets = [
+            "MATH_Pythia-70M",
+            "MATH_Pythia-160M",
+            "MATH_Pythia-410M",
+            "MATH_Pythia-1B",
+            # "MATH_Pythia-1.4B",  # Exclude to have 7 to plot.
+            "MATH_Pythia-2.8B",
+            "MATH_Pythia-6.9B",
+            "MATH_Pythia-12B",
+        ]
+        for subset in subsets:
+            benchmark, model = subset.split("_")
+            ds = load_dataset("ScalingIntelligence/monkey_business", subset)["test"]
+            correct: List[List[bool]] = ds["is_corrects"]
+            # Shape: (128, 10000)
+            wide_df = pd.DataFrame(
+                correct,
+                columns=1 + np.arange(10000),
+                dtype=np.float16,
+            )
+            # Convert to floats.
+            wide_df = wide_df.astype(np.float16)
+            wide_df["Problem Idx"] = ds["orig_dset_idx"]
+            df = wide_df.melt(
+                id_vars=["Problem Idx"],
+                var_name="Attempt Idx",
+                value_name="Score",
+            )
+
+            df["Benchmark"] = benchmark
+            # Convert, e.g., "Pythia-1.4B" to "Pythia 1.4B".
+            df["Model"] = model.replace("-", " ")
+            large_language_monkeys_original_dfs_list.append(df)
+
+        large_language_monkeys_original_individual_outcomes_df = pd.concat(
+            large_language_monkeys_original_dfs_list,
+        )
+        large_language_monkeys_original_individual_outcomes_df[
+            "Attempt Idx"
+        ] = pd.to_numeric(
+            large_language_monkeys_original_individual_outcomes_df["Attempt Idx"]
+        )
+
+        large_language_monkeys_original_individual_outcomes_df.to_parquet(
+            large_language_monkeys_original_individual_outcomes_df_path,
+            index=False,
+        )
+
+        print(
+            f"Wrote {large_language_monkeys_original_individual_outcomes_df_path} to disk."
+        )
+        del large_language_monkeys_original_individual_outcomes_df
+
+    large_language_monkeys_original_individual_outcomes_df = pd.read_parquet(
+        large_language_monkeys_original_individual_outcomes_df_path
+    )
+    print(
+        f"Loaded {large_language_monkeys_original_individual_outcomes_df_path} with shape: ",
+        large_language_monkeys_original_individual_outcomes_df.shape,
+    )
+    return large_language_monkeys_original_individual_outcomes_df
+
+
 def create_or_load_large_language_monkeys_original_pass_at_k_df(
     raw_data_dir=f"{os.getcwd()}/data/raw_data",
     processed_data_dir=f"{os.getcwd()}/data/processed_data",
@@ -512,7 +723,7 @@ def create_or_load_large_language_monkeys_original_pass_at_k_df(
     )
 
     if refresh or not os.path.exists(large_language_monkeys_original_pass_at_k_df_path):
-        print("Creating large_language_monkeys_original_pass_at_k_df_path anew...")
+        print(f"Creating {large_language_monkeys_original_pass_at_k_df_path} anew...")
 
         os.makedirs(processed_data_dir, exist_ok=True)
         large_language_monkeys_dir = os.path.join(
@@ -1149,6 +1360,96 @@ def estimate_pass_at_k(
     return pass_at_k
 
 
+def fit_beta_binomial_two_parameter_to_num_samples_and_num_successes(
+    num_samples_and_num_successes_df: pd.DataFrame,
+) -> pd.Series:
+    num_samples = num_samples_and_num_successes_df["Num. Samples Total"].values
+    num_successes = num_samples_and_num_successes_df["Num. Samples Correct"].values
+    largest_fraction_successes = np.max(np.divide(num_successes, num_samples))
+    initial_params = (0.5, 3.5, largest_fraction_successes)
+    bounds = [
+        (0.01, 100),
+        (0.01, 100),
+        (0.01, 1.0),
+    ]
+
+    # Fit alpha, beta, scale to the scaled beta binomial
+    optimize_result = scipy.optimize.minimize(
+        lambda params: compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
+            params,
+            num_samples=num_samples,
+            num_successes=num_successes,
+        ),
+        x0=initial_params,
+        bounds=bounds,
+        method="L-BFGS-B",
+        options=dict(
+            maxiter=5000,
+            maxls=100,
+            gtol=1e-6,  # Gradient tolerance, adjust as needed),
+        ),
+    )
+
+    result = pd.Series(
+        {
+            "alpha": optimize_result.x[0],
+            "beta": optimize_result.x[1],
+            "loc": 0.0,
+            "scale": optimize_result.x[2],
+            "neg_log_likelihood": optimize_result.fun,
+            "aic": 2 * len(initial_params) + 2 * optimize_result.fun,
+            "bic": len(initial_params) * np.log(len(data)) + 2 * optimize_result.fun,
+        }
+    )
+
+    return result
+
+
+def fit_beta_binomial_two_parameters_to_num_samples_and_num_successes(
+    num_samples_and_num_successes_df: pd.DataFrame,
+) -> pd.Series:
+    num_samples = num_samples_and_num_successes_df["Num. Samples Total"].values
+    num_successes = num_samples_and_num_successes_df["Num. Samples Correct"].values
+    initial_params = (0.5, 3.5)
+    bounds = [
+        (0.01, 100),
+        (0.01, 100),
+    ]
+
+    # Fit alpha, beta, scale to the scaled beta binomial
+    optimize_result = scipy.optimize.minimize(
+        lambda params: compute_beta_binomial_two_parameters_negative_log_likelihood(
+            num_samples=num_samples,
+            num_successes=num_successes,
+            params=params,
+        ),
+        x0=initial_params,
+        bounds=bounds,
+        method="L-BFGS-B",
+        options=dict(
+            maxiter=5000,
+            maxls=100,
+            gtol=1e-6,  # Gradient tolerance, adjust as needed),
+        ),
+    )
+
+    result = pd.Series(
+        {
+            "alpha": optimize_result.x[0],
+            "beta": optimize_result.x[1],
+            "loc": 0.0,
+            "scale": 1.0,
+            "neg_log_likelihood": optimize_result.fun,
+            "aic": 2 * len(initial_params) + 2 * optimize_result.fun,
+            "bic": len(initial_params) * np.log(len(num_samples_and_num_successes_df))
+            + 2 * optimize_result.fun,
+            "Power Law Exponent": optimize_result.x[0],
+        }
+    )
+
+    return result
+
+
 def fit_pass_at_1_beta_distribution_parameters(
     data: np.ndarray,
     resolution: float = 1e-4,
@@ -1478,10 +1779,12 @@ def fit_power_law(
             method="Nelder-Mead",
         )
 
+        # Assumed form: a * (scaling factor)^(-b)
         return pd.Series(
             {
-                "a": result.x[0],  # power law exponent
-                "b": result.x[1],  # log of scaling factor
+                "Log Power Law Prefactor": result.x[0],
+                "Power Law Prefactor": np.exp(result.x[0]),
+                "Power Law Exponent": result.x[1],
             }
         )
 
@@ -1502,9 +1805,10 @@ def fit_power_law(
             mask = mask & (df_with_predictions[col] == val)
 
         # Calculate predictions using the power law relationship
-        a, b = params["a"], params["b"]
         x_values = df_with_predictions.loc[mask, covariate_col]
-        predicted_values = np.exp(a) * np.power(x_values, -b)
+        predicted_values = params["Power Law Prefactor"] * np.power(
+            x_values, -params["Power Law Exponent"]
+        )
 
         # Add predictions to the dataframe
         df_with_predictions.loc[mask, f"Predicted {target_col}"] = predicted_values

@@ -20,7 +20,7 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
 # Parameters
 alpha = 0.3
 beta = 3.5
-pass_at_1 = np.logspace(-5, 0, 6000)
+pass_at_1 = np.logspace(-5, 0, 2200)
 palette = sns.color_palette("cool", n_colors=len(pass_at_1))
 palette_dict = dict(zip(pass_at_1, palette))
 
@@ -122,7 +122,7 @@ ax3.set(
     ylim=(3.162e-2, 1.5e1),
     ylabel=r"$p_{\mathcal{D}}(\operatorname{pass_i@1})$",
     yscale="log",
-    title="Distribution of Per-Problem Pass@1",
+    title="Pass@1 Distribution Over Problems",
 )
 ax3.axvline(3.162e-2, color="k", linestyle="--")
 # Add equals sign between ax1 and ax2
