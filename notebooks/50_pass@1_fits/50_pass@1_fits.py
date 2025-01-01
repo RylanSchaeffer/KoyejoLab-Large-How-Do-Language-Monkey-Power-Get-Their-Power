@@ -169,7 +169,7 @@ plt.show()
 
 # Load the original LLMonkeys pass@k data on MATH.
 llmonkeys_original_pass_at_k_df = (
-    src.analyze.create_or_load_large_language_monkeys_original_pass_at_k_df(
+    src.analyze.create_or_load_large_language_monkeys_pythia_math_pass_at_k_df(
         refresh=False,
     )
 )

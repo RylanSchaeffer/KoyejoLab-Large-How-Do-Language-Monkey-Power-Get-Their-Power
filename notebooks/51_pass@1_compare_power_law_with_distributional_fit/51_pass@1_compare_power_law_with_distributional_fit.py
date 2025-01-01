@@ -23,7 +23,7 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
 llmonkeys_groupby_cols = ["Model", "Benchmark"]
 
 
-llmonkeys_original_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_original_pass_at_k_df(
+llmonkeys_original_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_pythia_math_pass_at_k_df(
     refresh=False,
     # refresh=True,
 )
@@ -54,7 +54,7 @@ print(
 )
 
 
-llmonkeys_individual_outcomes_df = src.analyze.create_or_load_large_language_monkeys_original_individual_outcomes_df(
+llmonkeys_individual_outcomes_df = src.analyze.create_or_load_large_language_monkeys_pythia_math_individual_outcomes_df(
     refresh=False,
     # refresh=True,
 )
@@ -66,10 +66,10 @@ llmonkeys_num_samples_and_num_successes_df = (
     )
 )
 
-llmonkeys_beta_binomial_two_parameters_fits_df = (
+llmonkeys_beta_binomial_three_parameters_fits_df = (
     llmonkeys_num_samples_and_num_successes_df.groupby(llmonkeys_groupby_cols)
     .apply(
-        lambda df: src.analyze.fit_beta_binomial_two_parameters_to_num_samples_and_num_successes(
+        lambda df: src.analyze.fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
             num_samples_and_num_successes_df=df
         )
     )
@@ -77,7 +77,22 @@ llmonkeys_beta_binomial_two_parameters_fits_df = (
 )
 
 print(
-    "Large Language Monkeys BetaBinomial Fit: ",
+    "Large Language Monkeys Beta-Binomial 3-Parameter Fit: ",
+    llmonkeys_beta_binomial_three_parameters_fits_df,
+)
+
+llmonkeys_beta_binomial_two_parameters_fits_df = (
+    llmonkeys_num_samples_and_num_successes_df.groupby(llmonkeys_groupby_cols)
+    .apply(
+        lambda df: src.analyze.fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
+            num_samples_and_num_successes_df=df
+        )
+    )
+    .reset_index()
+)
+
+print(
+    "Large Language Monkeys BetaBinomial 2-Parameter Fit: ",
     llmonkeys_beta_binomial_two_parameters_fits_df,
 )
 
@@ -202,7 +217,7 @@ src.plot.save_plot_with_multiple_extensions(
 plt.show()
 
 
-llmonkeys_original_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_original_pass_at_k_df(
+llmonkeys_original_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_pythia_math_pass_at_k_df(
     refresh=False,
     # refresh=True,
 )

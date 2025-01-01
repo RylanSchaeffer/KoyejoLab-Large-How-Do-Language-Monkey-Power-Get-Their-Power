@@ -17,7 +17,7 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
     refresh=False,
 )
 
-large_language_monkeys_original_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_original_pass_at_k_df(
+large_language_monkeys_original_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_pythia_math_pass_at_k_df(
     refresh=False,
     # refresh=True,
 )
@@ -209,4 +209,4 @@ src.plot.save_plot_with_multiple_extensions(
 )
 # plt.show()
 
-print("Finished notebooks/02_large_language_monkeys_original_eda.py!")
+print("Finished notebooks/02_large_language_monkeys_pythia_math_eda.py!")

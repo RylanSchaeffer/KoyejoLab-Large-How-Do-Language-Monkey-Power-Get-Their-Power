@@ -1,114 +1,60 @@
-import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
+import flint
+import mpmath
 import numpy as np
-import os
-import pandas as pd
-import pprint
-from scipy.optimize import minimize
-import scipy.stats
-import seaborn as sns
-from typing import Any, Dict, List, Tuple
-
-import src.analyze
+from typing import Tuple
 
 
-large_language_monkeys_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_original_pass_at_k_df(
-    refresh=False,
-    # refresh=True,
-)
+def compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
+    params: Tuple[float, float, float],
+    num_samples: np.ndarray,
+    num_successes: np.ndarray,
+) -> float:
+    """
+    3-parameter Beta-Binomial PMF using Gauss hypergeometric function:
 
-large_language_monkeys_pass_at_1_df = large_language_monkeys_pass_at_k_df[
-    (large_language_monkeys_pass_at_k_df["Scaling Parameter"] == 1)
-    & (large_language_monkeys_pass_at_k_df["Model"] == "Pythia 12B")
-    & (large_language_monkeys_pass_at_k_df["Benchmark"] == "MATH")
-].copy()
+    P(X=x) = binom(n, x) * [c^x / B(alpha, beta)] * B(x + alpha, beta) * _2F_1(arguments).
+    """
+
+    alpha, beta, scale = params
+    nll_arr = np.zeros_like(num_samples, dtype=np.float64)
+    for idx, (n, x) in enumerate(zip(num_samples, num_successes)):
+        if not (0 <= x <= n):
+            return 0.0
+
+        # binomial coefficient binom(n, x)
+        binom_factor = mpmath.binomial(int(n), int(x))
+
+        # c^x
+        c_to_x = mpmath.power(scale, x)
+
+        # Beta(alpha, beta)
+        B_a_b = mpmath.beta(alpha, beta)
+
+        # Beta(x+alpha, beta)
+        B_xa_b = mpmath.beta(x + alpha, beta)
+
+        # hypergeometric function
+        #   _2F_1(-(n-x), x+alpha; x+alpha+beta; c)
+        # using mpmath.hyp2f1
+        f = flint.arb(scale).hypgeom_2f1(float(-(n - x)), x + alpha, x + alpha + beta)
+        # f = mpmath.hyp2f1(-(n - x), x + alpha, x + alpha + beta, scale)
+
+        pmf = binom_factor * c_to_x * B_xa_b * f / B_a_b
+        nll = mpmath.log(pmf)
+        nll_arr[idx] = -float(nll)
+
+    nll = np.mean(nll_arr)
+    return nll
 
 
-def estimate_params(data, n):
-    # Inputs:
-    # data: an 1-D array of length number of problems
-    # each entry in data should give the number of correct answers
-    # n: an integer representing the number of attempts per problem
-
-    # Outputs:
-    # alpha and beta: floats representing the MLEs for alpha and beta
-
-    # define the nll of the distribution
-    def nll(params):
-        # Inputs:
-        # a, b: floats: alpha, beta for negative binomial distribution
-        # Outputs:
-        # float: the mean nll
-        a, b = params
-        fit_dist = scipy.stats.betabinom(n, a, b)
-        pdf_values = fit_dist.logpmf(data)
-        return -pdf_values.mean()
-
-    # initialize a random guess for alpha and beta
-    initial_guess = [np.random.rand(), np.random.rand()]
-
-    # minimize the nll
-    result = minimize(nll, initial_guess)
-    fitted_params = result.x
-    return fitted_params
-
-
-def estimate_params_with_scale(data, n):
-    # Inputs:
-    # data: an 1-D array of length number of problems
-    # each entry in data should give the number of correct answers
-    # n: an integer representing the number of attempts per problem
-
-    # Outputs:
-    # alpha and beta: floats representing the MLEs for alpha and beta
-
-    # define the nll of the distribution
-    def nll(params):
-        # Inputs:
-        # a, b: floats: alpha, beta for negative binomial distribution
-        # Outputs:
-        # float: the mean nll
-        a, b, scale = params
-
-        def integrand(p):
-            return scipy.stats.binom.pmf(data, n, p) * scipy.stats.beta.pdf(
-                p, a, b, scale=scale
-            )
-
-        nums = scipy.integrate.quad_vec(integrand, 0, 1)[0]
-        return -np.log(nums).mean()
-
-    # initialize a random guess for alpha and beta
-    initial_guess = [np.random.rand(), np.random.rand(), max(data / n) + 0.0001]
-
-    # minimize the nll
-    result = minimize(
-        nll,
-        initial_guess,
-        bounds=((0, float("inf")), (0, float("inf")), (max(data) / n, 1)),
-        method="L-BFGS-B",
-        options=dict(
-            maxiter=5000,
-            maxls=100,
-            gtol=1e-6,  # Gradient tolerance, adjust as needed),
-        ),
+# Test the function
+if __name__ == "__main__":
+    params = (0.5, 3.5, 0.23280001)
+    num_samples = np.array([10000])
+    num_successes = np.array([122])
+    nll = compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
+        params=params,
+        num_samples=num_samples,
+        num_successes=num_successes,
     )
-    fitted_params = result.x
-    return fitted_params
-
-
-data = large_language_monkeys_pass_at_1_df["Num. Samples Correct"].values.astype(int)
-params = estimate_params_with_scale(data=data, n=10000)
-
-
-# Compute the beta distribution using the fitted parameters.
-x = np.linspace(0.0, 1.0, 100000)
-p_x = scipy.stats.beta.pdf(x, params[0], params[1], scale=params[2])
-
-print()
-
-plt.close()
-plt.plot(x, p_x)
-plt.xscale("log")
-plt.yscale("log")
-plt.show()
+    print("-log prob =", nll)

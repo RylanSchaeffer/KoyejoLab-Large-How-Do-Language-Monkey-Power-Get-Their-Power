@@ -1,8 +1,10 @@
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datasets import load_dataset
-from functools import partial
+import flint
 import itertools
-import mpmath as mp
+import mpmath
+from math import comb
+from scipy.special import betaln
 import numpy as np
 import os
 import pandas as pd
@@ -13,55 +15,118 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import src.globals
 
+# Increase to 100 bits of precision
+mpmath.mp.prec = 100
 
 # This helps print more columns.
 pd.set_option("display.width", 1000)
 pd.set_option("display.expand_frame_repr", False)
 
 
-def compute_beta_binomial_three_parameter_distribution_integrand(
-    p: float, n: np.ndarray, k: np.ndarray, alpha: float, beta: float, scale: float
-) -> float:
-    # Convert everything to mpmath types for extreme precision.
-    p = mp.mpf(p)
-    alpha = mp.mpf(alpha)
-    beta = mp.mpf(beta)
-    scale = mp.mpf(scale)
-
-    if p <= 0 or p >= scale:
-        return mp.mpf("0")
-
-    log_scaled_beta: float = scipy.stats.beta.logpdf(
-        p, alpha, beta, loc=0.0, scale=scale
-    )
-    # Shape: (num of problems,)
-    log_binomials: np.ndarray = scipy.stats.binom.logpmf(k=k, n=n, p=p)
-    log_result = log_scaled_beta + np.sum(log_binomials)
-    return mp.e ** (log_result)
+# def compute_beta_binomial_three_parameter_distribution_integrand(
+#     p: float, n: np.ndarray, k: np.ndarray, alpha: float, beta: float, scale: float
+# ) -> float:
+#     # Convert everything to mpmath types for extreme precision.
+#     # p = mp.mpf(p)
+#     # alpha = mp.mpf(alpha)
+#     # beta = mp.mpf(beta)
+#     # scale = mp.mpf(scale)
+#
+#     if p <= 0 or p >= scale:
+#         return 0.0  # mp.mpf("0")
+#
+#     log_scaled_beta: float = scipy.stats.beta.logpdf(
+#         p, alpha, beta, loc=0.0, scale=scale
+#     )
+#     # Shape: (num of problems,)
+#     log_binomials: np.ndarray = scipy.stats.binom.logpmf(k=k, n=n, p=p)
+#     log_result = log_scaled_beta + np.sum(log_binomials)
+#     # return mp.e ** (log_result)
+#     return np.exp(log_result)
+#
+#
+# def compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
+#     params: Tuple[int, int, float, float],
+#     num_samples: np.ndarray,
+#     num_successes: np.ndarray,
+# ) -> float:
+#     alpha, beta, scale = params
+#
+#     # Use a smaller absolute tolerance and increase max evaluations
+#     likelihood, error = integrate.quad(
+#         compute_beta_binomial_three_parameter_distribution_integrand,
+#         0.0,
+#         scale,
+#         args=(num_samples, num_successes, alpha, beta, scale),
+#         epsabs=1e-12,
+#         epsrel=1e-10,
+#         limit=5000,
+#     )
+#     # Check if result is reasonable
+#     if not np.isfinite(likelihood):
+#         raise ValueError("Likelihood is not finite.")
+#     neg_log_likelihood = -np.log(likelihood)
+#     mean_neg_log_likelihood = np.mean(neg_log_likelihood)
+#     return mean_neg_log_likelihood
 
 
 def compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
-    params: Tuple[int, int, float, float],
+    params: Tuple[float, float, float],
     num_samples: np.ndarray,
     num_successes: np.ndarray,
 ) -> float:
-    alpha, beta, scale = params
+    """
+    3-parameter Beta-Binomial PMF using Gauss hypergeometric function:
 
-    # Use a smaller absolute tolerance and increase max evaluations
-    likelihood, error = integrate.quad(
-        compute_beta_binomial_three_parameter_distribution_integrand,
-        0.0,
-        scale,
-        args=(num_samples, num_successes, alpha, beta, scale),
-        epsabs=1e-12,
-        epsrel=1e-10,
-        limit=5000,
-    )
-    # Check if result is reasonable
-    if not np.isfinite(likelihood):
-        raise ValueError("Likelihood is not finite.")
-    neg_log_likelihood = -np.log(likelihood)
-    return neg_log_likelihood
+    P(X=x) = binom(n, x) * [c^x / B(alpha, beta)] * B(x + alpha, beta) * _2F_1(arguments).
+    """
+
+    alpha, beta, scale = params
+    # scale = np.max(np.divide(num_successes, num_samples)) + 1e-16
+    nll_arr = np.zeros_like(num_samples, dtype=np.float64)
+    for idx, (n, x) in enumerate(zip(num_samples, num_successes)):
+        if not (0 <= x <= n):
+            return 0.0
+
+        # def integrand(z):
+        #     return (
+        #         z ** (x + alpha - 1.0)
+        #         * (1.0 - z) ** (beta - 1.0)
+        #         * (1.0 - scale * z) ** (n - x)
+        #     )
+
+        # binomial coefficient binom(n, x)
+        binom_factor = mpmath.binomial(int(n), int(x))
+
+        # c^x
+        c_to_x = mpmath.power(scale, x)
+
+        # Beta(alpha, beta)
+        B_a_b = mpmath.beta(alpha, beta)
+
+        # Beta(x+alpha, beta)
+        B_xa_b = mpmath.beta(x + alpha, beta)
+
+        # hypergeometric function
+        #   _2F_1(-(n-x), x+alpha; x+alpha+beta; c)
+        # using mpmath.hyp2f1
+        # f = mpmath.hyp2f1(
+        #     -(n - x),
+        #     x + alpha,
+        #     x + alpha + beta,
+        #     scale,
+        #     # nmaxterms=2000000,
+        #     # method="a+bt",
+        # )
+        f = flint.arb(scale).hypgeom_2f1(float(-(n - x)), x + alpha, x + alpha + beta)
+        pmf = binom_factor * c_to_x * B_xa_b * f / B_a_b
+        # val = mpmath.quad(integrand, [0, 1])
+        # pmf = binom_factor * c_to_x * val / B_a_b
+        nll = -mpmath.log(pmf)
+        nll_arr[idx] = float(nll)
+
+    avg_nll: float = np.mean(nll_arr)
+    return avg_nll
 
 
 def compute_beta_binomial_two_parameters_negative_log_likelihood(
@@ -71,7 +136,7 @@ def compute_beta_binomial_two_parameters_negative_log_likelihood(
 ) -> float:
     log_pmf = scipy.stats.betabinom.logpmf(
         k=num_successes, n=num_samples, a=params[0], b=params[1]
-    ).sum()
+    ).mean()
     return -log_pmf
 
 
@@ -222,6 +287,71 @@ def compute_discretized_neg_log_likelihood(
     return neg_discretized_log_likelihood
 
 
+def compute_pass_at_k_from_individual_outcomes(
+    individual_outcomes_per_problem: np.ndarray,
+    ks_list: List[int],
+) -> pd.DataFrame:
+    num_problems, num_samples_per_problem = individual_outcomes_per_problem.shape
+    pass_at_k_dfs_list = []
+    num_samples_total = np.full(num_problems, fill_value=num_samples_per_problem)
+    num_samples_correct = individual_outcomes_per_problem.sum(axis=1)
+    for k in ks_list:
+        pass_at_k = src.analyze.estimate_pass_at_k(
+            num_samples_total=num_samples_total,
+            num_samples_correct=num_samples_correct,
+            k=k,
+        )
+        pass_at_k_df = pd.DataFrame(
+            {
+                "Score": pass_at_k,
+                "Scaling Parameter": k,
+                "Problem Idx": np.arange(num_problems),
+            }
+        )
+        pass_at_k_dfs_list.append(pass_at_k_df)
+    pass_at_k_df = pd.concat(pass_at_k_dfs_list)
+    # Drop any NaN scores.
+    pass_at_k_df.dropna(subset=["Score"], inplace=True)
+    return pass_at_k_df
+
+
+def compute_signed_logsumexp(log_terms: np.ndarray, signs: np.ndarray) -> float:
+    """
+    Compute log( sum_{i} [ signs[i] * exp(log_terms[i]) ] )
+    in a numerically stable manner.
+
+    Parameters
+    ----------
+    log_terms : array_like
+        The logarithms of the absolute values of the terms to be summed.
+    signs : array_like
+        +1 or -1 for each term.
+
+    Returns
+    -------
+    float
+        log of the signed sum.  If the final sum is <= 0 due to numerical
+        cancellation, returns -np.inf.
+    """
+    # 1) Find the maximum log_term to factor out
+    max_log = np.max(log_terms)
+
+    # 2) Accumulate sum of signed exponentials (relative to max_log)
+    total = 0.0
+    for lt, s in zip(log_terms, signs):
+        total += s * np.exp(lt - max_log)
+
+    # 3) Check the sign of the result
+    if total <= 0.0:
+        # Numerically, the sum should be positive for a valid probability,
+        # but catastrophic cancellation could cause negative or zero.
+        # We return -inf so the final log PMF is well-defined (log(0) = -inf).
+        return -np.inf
+
+    # 4) Otherwise, return log of the magnitude + max_log
+    return np.log(total) + max_log
+
+
 def compute_scaling_exponent_from_distributional_fit(
     distributional_fit_df: pd.DataFrame,
     distribution: str = "beta",
@@ -278,34 +408,6 @@ def compute_scaling_exponent_from_distributional_fit(
         raise ValueError(f"Unknown distribution: {distribution}")
 
     return distributional_fit_df
-
-
-def compute_pass_at_k_from_individual_outcomes(
-    individual_outcomes_per_problem: np.ndarray,
-    ks_list: List[int],
-) -> pd.DataFrame:
-    num_problems, num_samples_per_problem = individual_outcomes_per_problem.shape
-    pass_at_k_dfs_list = []
-    num_samples_total = np.full(num_problems, fill_value=num_samples_per_problem)
-    num_samples_correct = individual_outcomes_per_problem.sum(axis=1)
-    for k in ks_list:
-        pass_at_k = src.analyze.estimate_pass_at_k(
-            num_samples_total=num_samples_total,
-            num_samples_correct=num_samples_correct,
-            k=k,
-        )
-        pass_at_k_df = pd.DataFrame(
-            {
-                "Score": pass_at_k,
-                "Scaling Parameter": k,
-                "Problem Idx": np.arange(num_problems),
-            }
-        )
-        pass_at_k_dfs_list.append(pass_at_k_df)
-    pass_at_k_df = pd.concat(pass_at_k_dfs_list)
-    # Drop any NaN scores.
-    pass_at_k_df.dropna(subset=["Score"], inplace=True)
-    return pass_at_k_df
 
 
 def convert_individual_outcomes_to_num_samples_and_num_successes(
@@ -539,99 +641,178 @@ def create_or_load_bon_jailbreaking_pass_at_k_df(
     return models_gsm8k_pass_at_k_df
 
 
-def create_or_load_large_language_monkeys_pass_at_k_df(
+def create_or_load_large_language_monkeys_llama_code_contests_individual_outcomes_df(
     raw_data_dir=f"{os.getcwd()}/data/raw_data",
     processed_data_dir=f"{os.getcwd()}/data/processed_data",
     refresh: bool = False,
 ) -> pd.DataFrame:
-    large_language_monkeys_pass_at_k_df_path = os.path.join(
-        processed_data_dir, "large_language_monkeys_pass_at_k.parquet"
+    large_language_monkeys_code_contests_individual_outcomes_df_path = os.path.join(
+        processed_data_dir,
+        "large_language_monkeys_code_contests_individual_outcomes.parquet",
     )
 
-    if refresh or not os.path.exists(large_language_monkeys_pass_at_k_df_path):
-        print("Creating large_language_monkeys_pass_at_k_df_path anew...")
+    if refresh or not os.path.exists(
+        large_language_monkeys_code_contests_individual_outcomes_df_path
+    ):
+        print(
+            f"Creating {large_language_monkeys_code_contests_individual_outcomes_df_path} anew..."
+        )
 
         os.makedirs(processed_data_dir, exist_ok=True)
-        large_language_monkeys_dir = os.path.join(
-            raw_data_dir, "large_language_monkeys"
-        )
-        large_language_monkeys_dfs_list = []
-        parquet_filenames = [
-            "gsm8k_pass_at_k.parquet",
-            "math_pass_at_k.parquet",
+        large_language_monkeys_original_dfs_list = []
+        subsets = [
+            "CodeContests_Llama-3-8B",
+            "CodeContests_Llama-3-8B-Instruct",
+            "CodeContests_Llama-3-70B-Instruct",
+            "CodeContests_Gemma-2B",
+            "CodeContests_Gemma-7B",
+            # "MiniF2F-MATH_Llama-3-8B-Instruct",
+            # "MiniF2F-MATH_Llama-3-70B-Instruct",
         ]
-        for parquet_filename in parquet_filenames:
-            benchmark = parquet_filename.split("_")[0]
-            df = pd.read_parquet(
-                os.path.join(large_language_monkeys_dir, parquet_filename)
+        for subset in subsets:
+            benchmark, model = subset.split("_")
+            ds = load_dataset("ScalingIntelligence/monkey_business", subset)["test"]
+            correct: List[List[bool]] = ds["is_corrects"]
+            # Shape: (128, 10000)
+            wide_df = pd.DataFrame(
+                correct,
+                columns=1 + np.arange(10000),
+                dtype=np.float16,
             )
-            df[
-                "Benchmark"
-            ] = src.globals.LARGE_LANGUAGE_MONKEYS_BENCHMARKS_TO_NICE_STRINGS[benchmark]
-            large_language_monkeys_dfs_list.append(df)
-        large_language_monkeys_pass_at_k_df = pd.concat(
-            large_language_monkeys_dfs_list,
+            # Convert to floats.
+            wide_df = wide_df.astype(np.float16)
+            wide_df["Problem Idx"] = ds["orig_dset_idx"]
+            df = wide_df.melt(
+                id_vars=["Problem Idx"],
+                var_name="Attempt Idx",
+                value_name="Score",
+            )
+
+            df["Benchmark"] = benchmark
+            # Convert, e.g., "Pythia-1.4B" to "Pythia 1.4B".
+            df["Model"] = model.replace("-", " ")
+            large_language_monkeys_original_dfs_list.append(df)
+
+        large_language_monkeys_original_individual_outcomes_df = pd.concat(
+            large_language_monkeys_original_dfs_list,
+        )
+        large_language_monkeys_original_individual_outcomes_df[
+            "Attempt Idx"
+        ] = pd.to_numeric(
+            large_language_monkeys_original_individual_outcomes_df["Attempt Idx"]
         )
 
-        # Only keep large & final checkpoints.
-        models_to_keep = [
-            "Pythia_70M_300B",
-            "Pythia_160M_300B",
-            "Pythia_410M_300B",
-            "Pythia_1B_300B",
-            "Pythia_2.8B_300B",
-            "Pythia_6.9B_300B",
-            "Pythia_12B_300B",
+        large_language_monkeys_original_individual_outcomes_df.to_parquet(
+            large_language_monkeys_code_contests_individual_outcomes_df_path,
+            index=False,
+        )
+
+        print(
+            f"Wrote {large_language_monkeys_code_contests_individual_outcomes_df_path} to disk."
+        )
+        del large_language_monkeys_original_individual_outcomes_df
+
+    large_language_monkeys_original_individual_outcomes_df = pd.read_parquet(
+        large_language_monkeys_code_contests_individual_outcomes_df_path
+    )
+    print(
+        f"Loaded {large_language_monkeys_code_contests_individual_outcomes_df_path} with shape: ",
+        large_language_monkeys_original_individual_outcomes_df.shape,
+    )
+    return large_language_monkeys_original_individual_outcomes_df
+
+
+def create_or_load_large_language_monkeys_llama_code_contests_pass_at_k_df(
+    raw_data_dir=f"{os.getcwd()}/data/raw_data",
+    processed_data_dir=f"{os.getcwd()}/data/processed_data",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    large_language_monkeys_original_pass_at_k_df_path = os.path.join(
+        processed_data_dir,
+        "large_language_monkeys_llama_code_contests_pass_at_k.parquet",
+    )
+
+    if refresh or not os.path.exists(large_language_monkeys_original_pass_at_k_df_path):
+        print(f"Creating {large_language_monkeys_original_pass_at_k_df_path} anew...")
+
+        large_language_monkeys_llama_code_contests_scores_df = create_or_load_large_language_monkeys_llama_code_contests_individual_outcomes_df(
+            raw_data_dir=raw_data_dir,
+            processed_data_dir=processed_data_dir,
+            refresh=refresh,
+        )
+        large_language_monkeys_code_contests_pass_at_k_df = (
+            large_language_monkeys_llama_code_contests_scores_df.groupby(
+                ["Model", "Benchmark", "Problem Idx"]
+            )
+            .agg(
+                {
+                    "Score": ["size", "sum"],
+                }
+            )
+            .reset_index()
+        )
+
+        large_language_monkeys_code_contests_pass_at_k_df.columns = [
+            "".join(col).strip() if isinstance(col, tuple) else col
+            for col in large_language_monkeys_code_contests_pass_at_k_df.columns
         ]
-        large_language_monkeys_pass_at_k_df = large_language_monkeys_pass_at_k_df[
-            large_language_monkeys_pass_at_k_df["Model Nickname"].isin(models_to_keep)
-        ]
-        large_language_monkeys_pass_at_k_df[
-            "Model Nickname"
-        ] = large_language_monkeys_pass_at_k_df["Model Nickname"].map(
-            src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_TO_NICE_STRINGS
-        )
-
-        large_language_monkeys_pass_at_k_df.drop(
-            columns=["Inference Compute", "neg_log_pass@k"],
-            inplace=True,
-        )
-
-        large_language_monkeys_pass_at_k_df.rename(
+        large_language_monkeys_code_contests_pass_at_k_df.rename(
             columns={
-                "pass@k": "Score",
-                "k": "Scaling Parameter",
-                "prompt_idx": "Problem Idx",
-                "Model Nickname": "Model",
+                "Scoresize": "Num. Samples Total",
+                "Scoresum": "Num. Samples Correct",
             },
             inplace=True,
         )
 
-        large_language_monkeys_pass_at_k_df["Log Score"] = np.log(
-            large_language_monkeys_pass_at_k_df["Score"]
+        large_language_monkeys_code_contests_pass_at_k_dfs_list = []
+        for k in src.globals.LARGE_LANGUAGE_MONKEYS_ORIGINAL_Ks_LIST:
+            large_language_monkeys_original_pass_at_k_df_copy = (
+                large_language_monkeys_code_contests_pass_at_k_df.copy()
+            )
+            large_language_monkeys_original_pass_at_k_df_copy["Scaling Parameter"] = k
+            large_language_monkeys_original_pass_at_k_df_copy[
+                "Score"
+            ] = estimate_pass_at_k(
+                num_samples_total=large_language_monkeys_code_contests_pass_at_k_df[
+                    "Num. Samples Total"
+                ].values,
+                num_samples_correct=large_language_monkeys_code_contests_pass_at_k_df[
+                    "Num. Samples Correct"
+                ].values,
+                k=k,
+            )
+            large_language_monkeys_code_contests_pass_at_k_dfs_list.append(
+                large_language_monkeys_original_pass_at_k_df_copy
+            )
+        large_language_monkeys_code_contests_pass_at_k_df = pd.concat(
+            large_language_monkeys_code_contests_pass_at_k_dfs_list
         )
-        large_language_monkeys_pass_at_k_df[
+        large_language_monkeys_code_contests_pass_at_k_df["Log Score"] = np.log(
+            large_language_monkeys_code_contests_pass_at_k_df["Score"]
+        )
+        large_language_monkeys_code_contests_pass_at_k_df[
             "Neg Log Score"
-        ] = -large_language_monkeys_pass_at_k_df["Log Score"]
-        large_language_monkeys_pass_at_k_df.to_parquet(
-            large_language_monkeys_pass_at_k_df_path,
+        ] = -large_language_monkeys_code_contests_pass_at_k_df["Log Score"]
+
+        large_language_monkeys_code_contests_pass_at_k_df.to_parquet(
+            large_language_monkeys_original_pass_at_k_df_path,
             index=False,
         )
 
-        print(f"Wrote {large_language_monkeys_pass_at_k_df_path} to disk.")
-        del large_language_monkeys_pass_at_k_df
+        print(f"Wrote {large_language_monkeys_original_pass_at_k_df_path} to disk.")
+        del large_language_monkeys_code_contests_pass_at_k_df
 
-    large_language_monkeys_pass_at_k_df = pd.read_parquet(
-        large_language_monkeys_pass_at_k_df_path
+    large_language_monkeys_code_contests_pass_at_k_df = pd.read_parquet(
+        large_language_monkeys_original_pass_at_k_df_path
     )
     print(
-        "Loaded large_language_monkeys_pass_at_k_df_path with shape: ",
-        large_language_monkeys_pass_at_k_df.shape,
+        "Loaded large_language_monkeys_original_pass_at_k_df_path with shape: ",
+        large_language_monkeys_code_contests_pass_at_k_df.shape,
     )
-    return large_language_monkeys_pass_at_k_df
+    return large_language_monkeys_code_contests_pass_at_k_df
 
 
-def create_or_load_large_language_monkeys_original_individual_outcomes_df(
+def create_or_load_large_language_monkeys_pythia_math_individual_outcomes_df(
     raw_data_dir=f"{os.getcwd()}/data/raw_data",
     processed_data_dir=f"{os.getcwd()}/data/processed_data",
     refresh: bool = False,
@@ -713,7 +894,7 @@ def create_or_load_large_language_monkeys_original_individual_outcomes_df(
     return large_language_monkeys_original_individual_outcomes_df
 
 
-def create_or_load_large_language_monkeys_original_pass_at_k_df(
+def create_or_load_large_language_monkeys_pythia_math_pass_at_k_df(
     raw_data_dir=f"{os.getcwd()}/data/raw_data",
     processed_data_dir=f"{os.getcwd()}/data/processed_data",
     refresh: bool = False,
@@ -848,7 +1029,7 @@ def create_or_load_large_language_monkeys_original_pass_at_1_beta_fits(
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     # Load the original pass@k data on MATH.
     llmonkeys_original_pass_at_k_df = (
-        src.analyze.create_or_load_large_language_monkeys_original_pass_at_k_df(
+        src.analyze.create_or_load_large_language_monkeys_pythia_math_pass_at_k_df(
             refresh=refresh,
         )
     )
@@ -1360,7 +1541,7 @@ def estimate_pass_at_k(
     return pass_at_k
 
 
-def fit_beta_binomial_two_parameter_to_num_samples_and_num_successes(
+def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
     num_samples_and_num_successes_df: pd.DataFrame,
 ) -> pd.Series:
     num_samples = num_samples_and_num_successes_df["Num. Samples Total"].values
@@ -1370,7 +1551,10 @@ def fit_beta_binomial_two_parameter_to_num_samples_and_num_successes(
     bounds = [
         (0.01, 100),
         (0.01, 100),
-        (0.01, 1.0),
+        (
+            largest_fraction_successes + 1e-8,
+            1.0,
+        ),  # Scale can't be smaller than largest value.
     ]
 
     # Fit alpha, beta, scale to the scaled beta binomial
@@ -1385,6 +1569,7 @@ def fit_beta_binomial_two_parameter_to_num_samples_and_num_successes(
         method="L-BFGS-B",
         options=dict(
             maxiter=5000,
+            # maxiter=50,
             maxls=100,
             gtol=1e-6,  # Gradient tolerance, adjust as needed),
         ),
@@ -1398,9 +1583,11 @@ def fit_beta_binomial_two_parameter_to_num_samples_and_num_successes(
             "scale": optimize_result.x[2],
             "neg_log_likelihood": optimize_result.fun,
             "aic": 2 * len(initial_params) + 2 * optimize_result.fun,
-            "bic": len(initial_params) * np.log(len(data)) + 2 * optimize_result.fun,
+            "bic": len(initial_params) * np.log(len(num_samples_and_num_successes_df))
+            + 2 * optimize_result.fun,
         }
     )
+    print(result)
 
     return result
 

@@ -141,6 +141,14 @@ CAUSAL_LANGUAGE_MODELING_DATASETS_ORDER = [
 
 LARGE_LANGUAGE_MONKEYS_BENCHMARKS_TO_NICE_STRINGS = {"gsm8k": "GSM8K", "math": "MATH"}
 
+LARGE_LANGUAGE_MONKEYS_CODING_MODELS_ORDER = [
+    "Llama 3 8B",
+    "Llama 3 8B Instruct",
+    "Llama 3 70B Instruct",
+    "Gemma 2B",
+    "Gemma 7B",
+]
+
 LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER = [
     "Pythia 70M",
     "Pythia 160M",
