@@ -17,7 +17,7 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
     refresh=False,
 )
 
-large_language_monkeys_original_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_pythia_math_pass_at_k_df(
+large_language_monkeys_pythia_math_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_pythia_math_pass_at_k_df(
     refresh=False,
     # refresh=True,
 )
@@ -26,7 +26,7 @@ large_language_monkeys_original_pass_at_k_df = src.analyze.create_or_load_large_
 plt.close()
 plt.figure(figsize=(10, 6))
 g = sns.lineplot(
-    data=large_language_monkeys_original_pass_at_k_df,
+    data=large_language_monkeys_pythia_math_pass_at_k_df,
     x="Scaling Parameter",
     y="Score",
     hue="Model",
@@ -48,7 +48,7 @@ src.plot.save_plot_with_multiple_extensions(
 # plt.show()
 
 large_language_monkeys_original_neg_log_avg_pass_at_k_df = (
-    large_language_monkeys_original_pass_at_k_df.groupby(
+    large_language_monkeys_pythia_math_pass_at_k_df.groupby(
         ["Model", "Benchmark", "Scaling Parameter"]
     )["Score"]
     .mean()
@@ -107,7 +107,7 @@ src.plot.save_plot_with_multiple_extensions(
 
 plt.close()
 g = sns.relplot(
-    data=large_language_monkeys_original_pass_at_k_df,
+    data=large_language_monkeys_pythia_math_pass_at_k_df,
     kind="line",
     x="Scaling Parameter",
     y="Score",
@@ -136,7 +136,7 @@ src.plot.save_plot_with_multiple_extensions(
 
 plt.close()
 g = sns.relplot(
-    data=large_language_monkeys_original_pass_at_k_df,
+    data=large_language_monkeys_pythia_math_pass_at_k_df,
     kind="line",
     x="Scaling Parameter",
     y="Neg Log Score",
@@ -155,6 +155,20 @@ g.set(
     ylabel=r"$-\log(\operatorname{pass_{i}@k})$",
     xlabel=r"Num. Attempts per Problem $k$",
 )
+# For each subplot, plot the aggregate power law behavior in black.
+for ax, model in zip(
+    g.axes.flat, src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER
+):
+    model_df = large_language_monkeys_original_neg_log_avg_pass_at_k_df[
+        large_language_monkeys_original_neg_log_avg_pass_at_k_df["Model"] == model
+    ]
+    model_df = model_df.sort_values("Scaling Parameter")
+    ax.plot(
+        model_df["Scaling Parameter"],
+        model_df["Predicted Neg Log Score"],
+        color="black",
+        linewidth=6,
+    )
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))  # You might need to adjust these values
 g.fig.suptitle("Large Language Monkeys")
@@ -167,8 +181,8 @@ src.plot.save_plot_with_multiple_extensions(
 
 plt.close()
 # Create better bins that handle zero and near-zero values
-smallest_nonzero_pass_at_1 = large_language_monkeys_original_pass_at_k_df[
-    large_language_monkeys_original_pass_at_k_df["Score"] > 0.0
+smallest_nonzero_pass_at_1 = large_language_monkeys_pythia_math_pass_at_k_df[
+    large_language_monkeys_pythia_math_pass_at_k_df["Score"] > 0.0
 ]["Score"].min()
 # Round smallest_nonzero_value to the nearest power of 10.
 smallest_nonzero_pass_at_1 = 10.0 ** np.floor(np.log10(smallest_nonzero_pass_at_1))
@@ -181,9 +195,9 @@ all_bins = np.concatenate(
     [[-small_value_for_plotting], [small_value_for_plotting], log_bins]
 )
 g = sns.displot(
-    data=large_language_monkeys_original_pass_at_k_df[
-        (large_language_monkeys_original_pass_at_k_df["Scaling Parameter"] == 1)
-        & (large_language_monkeys_original_pass_at_k_df["Benchmark"] == "MATH")
+    data=large_language_monkeys_pythia_math_pass_at_k_df[
+        (large_language_monkeys_pythia_math_pass_at_k_df["Scaling Parameter"] == 1)
+        & (large_language_monkeys_pythia_math_pass_at_k_df["Benchmark"] == "MATH")
     ],
     kind="hist",
     x="Score",

@@ -84,7 +84,7 @@ print(
 llmonkeys_beta_binomial_two_parameters_fits_df = (
     llmonkeys_num_samples_and_num_successes_df.groupby(llmonkeys_groupby_cols)
     .apply(
-        lambda df: src.analyze.fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
+        lambda df: src.analyze.fit_beta_binomial_two_parameters_to_num_samples_and_num_successes(
             num_samples_and_num_successes_df=df
         )
     )

@@ -15,59 +15,13 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import src.globals
 
-# Increase to 100 bits of precision
-mpmath.mp.prec = 100
+# Increase precision.
+mpmath.mp.prec = 1000
+flint.ctx.prec = 1000
 
 # This helps print more columns.
 pd.set_option("display.width", 1000)
 pd.set_option("display.expand_frame_repr", False)
-
-
-# def compute_beta_binomial_three_parameter_distribution_integrand(
-#     p: float, n: np.ndarray, k: np.ndarray, alpha: float, beta: float, scale: float
-# ) -> float:
-#     # Convert everything to mpmath types for extreme precision.
-#     # p = mp.mpf(p)
-#     # alpha = mp.mpf(alpha)
-#     # beta = mp.mpf(beta)
-#     # scale = mp.mpf(scale)
-#
-#     if p <= 0 or p >= scale:
-#         return 0.0  # mp.mpf("0")
-#
-#     log_scaled_beta: float = scipy.stats.beta.logpdf(
-#         p, alpha, beta, loc=0.0, scale=scale
-#     )
-#     # Shape: (num of problems,)
-#     log_binomials: np.ndarray = scipy.stats.binom.logpmf(k=k, n=n, p=p)
-#     log_result = log_scaled_beta + np.sum(log_binomials)
-#     # return mp.e ** (log_result)
-#     return np.exp(log_result)
-#
-#
-# def compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
-#     params: Tuple[int, int, float, float],
-#     num_samples: np.ndarray,
-#     num_successes: np.ndarray,
-# ) -> float:
-#     alpha, beta, scale = params
-#
-#     # Use a smaller absolute tolerance and increase max evaluations
-#     likelihood, error = integrate.quad(
-#         compute_beta_binomial_three_parameter_distribution_integrand,
-#         0.0,
-#         scale,
-#         args=(num_samples, num_successes, alpha, beta, scale),
-#         epsabs=1e-12,
-#         epsrel=1e-10,
-#         limit=5000,
-#     )
-#     # Check if result is reasonable
-#     if not np.isfinite(likelihood):
-#         raise ValueError("Likelihood is not finite.")
-#     neg_log_likelihood = -np.log(likelihood)
-#     mean_neg_log_likelihood = np.mean(neg_log_likelihood)
-#     return mean_neg_log_likelihood
 
 
 def compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
@@ -722,7 +676,7 @@ def create_or_load_large_language_monkeys_llama_code_contests_individual_outcome
     return large_language_monkeys_original_individual_outcomes_df
 
 
-def create_or_load_large_language_monkeys_llama_code_contests_pass_at_k_df(
+def create_or_load_large_language_monkeys_code_contests_pass_at_k_df(
     raw_data_dir=f"{os.getcwd()}/data/raw_data",
     processed_data_dir=f"{os.getcwd()}/data/processed_data",
     refresh: bool = False,
@@ -1552,9 +1506,10 @@ def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
         (0.01, 100),
         (0.01, 100),
         (
-            largest_fraction_successes + 1e-8,
+            largest_fraction_successes
+            + 1e-8,  # Scale can't be smaller than the largest fraction of successes.
             1.0,
-        ),  # Scale can't be smaller than largest value.
+        ),
     ]
 
     # Fit alpha, beta, scale to the scaled beta binomial
@@ -1568,8 +1523,8 @@ def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
         bounds=bounds,
         method="L-BFGS-B",
         options=dict(
-            maxiter=5000,
-            # maxiter=50,
+            # maxiter=5000,
+            maxiter=10,
             maxls=100,
             gtol=1e-6,  # Gradient tolerance, adjust as needed),
         ),

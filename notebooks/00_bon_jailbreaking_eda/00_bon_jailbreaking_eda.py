@@ -155,6 +155,18 @@ g.set(
     ylabel=r"$-\log(\operatorname{ASR_i@k})$",
     xlabel=r"Num. Attempts per Prompt $k$",
 )
+# For each subplot, plot the aggregate power law behavior in black.
+for ax, model in zip(g.axes.flat, src.globals.BON_JAILBREAKING_MODELS_ORDER):
+    model_df = bon_jailbreaking_neg_log_avg_pass_at_k_df[
+        bon_jailbreaking_neg_log_avg_pass_at_k_df["Model"] == model
+    ]
+    model_df = model_df.sort_values("Scaling Parameter")
+    ax.plot(
+        model_df["Scaling Parameter"],
+        model_df["Predicted Neg Log Score"],
+        color="black",
+        linewidth=6,
+    )
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))
 g.fig.suptitle("Best-of-N Jailbreaking")

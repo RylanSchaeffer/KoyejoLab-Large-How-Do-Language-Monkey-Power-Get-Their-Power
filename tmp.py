@@ -3,6 +3,10 @@ import mpmath
 import numpy as np
 from typing import Tuple
 
+# Increase precision.
+mpmath.mp.prec = 1000
+flint.ctx.prec = 1000
+
 
 def compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
     params: Tuple[float, float, float],
@@ -49,9 +53,9 @@ def compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
 
 # Test the function
 if __name__ == "__main__":
-    params = (0.5, 3.5, 0.23280001)
+    params = (0.5, 3.5, 0.03650001)
     num_samples = np.array([10000])
-    num_successes = np.array([122])
+    num_successes = np.array([0])
     nll = compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
         params=params,
         num_samples=num_samples,
