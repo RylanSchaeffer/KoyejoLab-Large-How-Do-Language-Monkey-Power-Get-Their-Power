@@ -307,43 +307,6 @@ def compute_pass_at_k_from_individual_outcomes(
     return pass_at_k_df
 
 
-def compute_signed_logsumexp(log_terms: np.ndarray, signs: np.ndarray) -> float:
-    """
-    Compute log( sum_{i} [ signs[i] * exp(log_terms[i]) ] )
-    in a numerically stable manner.
-
-    Parameters
-    ----------
-    log_terms : array_like
-        The logarithms of the absolute values of the terms to be summed.
-    signs : array_like
-        +1 or -1 for each term.
-
-    Returns
-    -------
-    float
-        log of the signed sum.  If the final sum is <= 0 due to numerical
-        cancellation, returns -np.inf.
-    """
-    # 1) Find the maximum log_term to factor out
-    max_log = np.max(log_terms)
-
-    # 2) Accumulate sum of signed exponentials (relative to max_log)
-    total = 0.0
-    for lt, s in zip(log_terms, signs):
-        total += s * np.exp(lt - max_log)
-
-    # 3) Check the sign of the result
-    if total <= 0.0:
-        # Numerically, the sum should be positive for a valid probability,
-        # but catastrophic cancellation could cause negative or zero.
-        # We return -inf so the final log PMF is well-defined (log(0) = -inf).
-        return -np.inf
-
-    # 4) Otherwise, return log of the magnitude + max_log
-    return np.log(total) + max_log
-
-
 def compute_scaling_exponent_from_distributional_fit(
     distributional_fit_df: pd.DataFrame,
     distribution: str = "beta",
@@ -1653,6 +1616,10 @@ def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
         fscale=largest_fraction_successes + epsilon,
     )
     # Inflate to correct for bias; is this correct?
+    # I think we actually want to divide by the expected value of the maximum of
+    # n i.i.d. Beta(alpha, beta) random variables. But this doesn't appear to exist
+    # in close form or even numerically?
+    # TODO(rylan): Investigate this further.
     smallest_scale = (num_data + 1.0) * largest_fraction_successes / num_data
     initial_params = (alpha, beta, smallest_scale + epsilon)
     bounds = [
