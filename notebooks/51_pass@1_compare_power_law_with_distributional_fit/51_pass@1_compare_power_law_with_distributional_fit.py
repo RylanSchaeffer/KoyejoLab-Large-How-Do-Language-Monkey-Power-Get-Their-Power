@@ -53,52 +53,26 @@ print(
     llmonkeys_fitted_power_law_parameters_df,
 )
 
-
-llmonkeys_individual_outcomes_df = src.analyze.create_or_load_large_language_monkeys_pythia_math_individual_outcomes_df(
-    refresh=False,
-    # refresh=True,
+llmonkeys_pythia_math_beta_binomial_mle_df = src.analyze.create_or_load_large_language_monkeys_pythia_math_beta_binomial_mle_df(
+    # refresh=False,
+    refresh=True,
 )
 
-llmonkeys_num_samples_and_num_successes_df = (
-    src.analyze.convert_individual_outcomes_to_num_samples_and_num_successes(
-        individual_outcomes_df=llmonkeys_individual_outcomes_df,
-        groupby_cols=llmonkeys_groupby_cols + ["Problem Idx"],
+# Add scaling exponent numerically.
+llmonkeys_pythia_math_beta_binomial_mle_df = (
+    src.analyze.compute_scaling_exponent_from_distributional_fit(
+        distributional_fit_df=llmonkeys_pythia_math_beta_binomial_mle_df,
+        distribution="beta_three_parameter",
     )
-)
-
-llmonkeys_beta_binomial_three_parameters_fits_df = (
-    llmonkeys_num_samples_and_num_successes_df.groupby(llmonkeys_groupby_cols)
-    .apply(
-        lambda df: src.analyze.fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
-            num_samples_and_num_successes_df=df
-        )
-    )
-    .reset_index()
 )
 
 print(
     "Large Language Monkeys Beta-Binomial 3-Parameter Fit: ",
-    llmonkeys_beta_binomial_three_parameters_fits_df,
+    llmonkeys_pythia_math_beta_binomial_mle_df,
 )
-
-llmonkeys_beta_binomial_two_parameters_fits_df = (
-    llmonkeys_num_samples_and_num_successes_df.groupby(llmonkeys_groupby_cols)
-    .apply(
-        lambda df: src.analyze.fit_beta_binomial_two_parameters_to_num_samples_and_num_successes(
-            num_samples_and_num_successes_df=df
-        )
-    )
-    .reset_index()
-)
-
-print(
-    "Large Language Monkeys BetaBinomial 2-Parameter Fit: ",
-    llmonkeys_beta_binomial_two_parameters_fits_df,
-)
-
 
 llmonkeys_joint_power_law_and_distr_fit_df = pd.merge(
-    llmonkeys_beta_binomial_two_parameters_fits_df[["Model", "Power Law Exponent"]],
+    llmonkeys_pythia_math_beta_binomial_mle_df[["Model", "Power Law Exponent"]],
     llmonkeys_fitted_power_law_parameters_df[["Model", "Power Law Exponent"]],
     on=["Model"],
     how="inner",
@@ -122,7 +96,7 @@ g.set(
     title="Large Language Monkeys",
     xlim=(0.00, 0.6),
     ylim=(0.00, 0.6),
-    xlabel=r"Power Law Exponent (Beta-Binomial)",
+    xlabel=r"Power Law Exponent (ScaledBeta-Binomial)",
     ylabel="Power Law Exponent (Least Squares)",
 )
 sns.move_legend(g, "upper left", bbox_to_anchor=(1.0, 1.04))

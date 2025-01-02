@@ -64,15 +64,15 @@ def compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
         # hypergeometric function
         #   _2F_1(-(n-x), x+alpha; x+alpha+beta; c)
         # using mpmath.hyp2f1
-        # f = mpmath.hyp2f1(
-        #     -(n - x),
-        #     x + alpha,
-        #     x + alpha + beta,
-        #     scale,
-        #     # nmaxterms=2000000,
-        #     # method="a+bt",
-        # )
-        f = flint.arb(scale).hypgeom_2f1(float(-(n - x)), x + alpha, x + alpha + beta)
+        f = mpmath.hyp2f1(
+            -(n - x),
+            x + alpha,
+            x + alpha + beta,
+            scale,
+            # nmaxterms=2000000,
+            # method="a+bt",
+        )
+        # f = flint.arb(scale).hypgeom_2f1(float(-(n - x)), x + alpha, x + alpha + beta)
         pmf = binom_factor * c_to_x * B_xa_b * f / B_a_b
         # val = mpmath.quad(integrand, [0, 1])
         # pmf = binom_factor * c_to_x * val / B_a_b
@@ -95,49 +95,87 @@ def compute_beta_binomial_two_parameters_negative_log_likelihood(
 
 
 def compute_beta_three_parameter_distribution_integrand(
-    p: float, k: int, alpha: float, beta: float, c: float
-) -> float:
+    p: mpmath.mpf, k: int, alpha: mpmath.mpf, beta: mpmath.mpf, c: mpmath.mpf
+) -> mpmath.mpf:
     """
-    Log of the integrand to improve numerical stability
+    Compute the log of the integrand using mpmath for arbitrary precision.
+
+    Args:
+        p: Integration variable (must be between 0 and c)
+        k: Integer parameter
+        alpha: First shape parameter of the beta distribution
+        beta: Second shape parameter of the beta distribution
+        c: Scale parameter (upper bound)
+
+    Returns:
+        Value of the integrand at point p
     """
     if p <= 0 or p >= c:
-        return 0.0
+        return mpmath.mpf("0.0")
 
-    # Compute in log space to avoid overflow/underflow
-    log_term1 = k * np.log1p(-p)
-    log_term2 = (alpha - 1) * np.log(p)
-    log_term3 = (beta - 1) * np.log(c - p)
-    log_term4 = -(alpha + beta - 1) * np.log(c)
-    log_term5 = -scipy.special.betaln(alpha, beta)
+    # Convert all inputs to mpmath types for high precision
+    p = mpmath.mpf(str(p))
+    k = mpmath.mpf(str(k))
+    alpha = mpmath.mpf(str(alpha))
+    beta = mpmath.mpf(str(beta))
+    c = mpmath.mpf(str(c))
+
+    # Compute in log space for numerical stability
+    log_term1 = k * mpmath.log1p(-p)
+    log_term2 = (alpha - 1) * mpmath.log(p)
+    log_term3 = (beta - 1) * mpmath.log(c - p)
+    log_term4 = -(alpha + beta - 1) * mpmath.log(c)
+    log_term5 = (
+        -mpmath.loggamma(alpha) - mpmath.loggamma(beta) + mpmath.loggamma(alpha + beta)
+    )
+
     log_result = log_term1 + log_term2 + log_term3 + log_term4 + log_term5
-    return np.exp(log_result)
+    return mpmath.exp(log_result)
 
 
 def compute_beta_three_parameter_distribution_integral(
-    k: int, alpha: float, beta: float, scale: float
+    k: int, alpha: float, beta: float, scale: float, dps: int = 50
 ) -> float:
     """
-    Compute the integral using adaptive quadrature with improved error handling
+    Compute the integral using mpmath's high-precision integration.
+
+    Args:
+        k: Integer parameter
+        alpha: First shape parameter of the beta distribution
+        beta: Second shape parameter of the beta distribution
+        scale: Scale parameter (upper bound)
+        dps: Decimal places of precision (default: 50)
+
+    Returns:
+        Result of the integral or nan if parameters are invalid
     """
+    # Set precision
+    mpmath.mp.dps = dps
+
+    # Parameter validation
     if not (0 < scale < 1 and alpha > 0 and beta > 0):
-        return np.nan
+        return float("nan")
 
-    # Use a smaller absolute tolerance and increase max evaluations
-    result, error = integrate.quad(
-        compute_beta_three_parameter_distribution_integrand,
-        0.0,
-        scale,
-        args=(k, alpha, beta, scale),
-        epsabs=1e-12,
-        epsrel=1e-10,
-        limit=5000,
-    )
+    try:
+        # Convert parameters to mpmath types
+        k_mp = mpmath.mpf(str(k))
+        alpha_mp = mpmath.mpf(str(alpha))
+        beta_mp = mpmath.mpf(str(beta))
+        scale_mp = mpmath.mpf(str(scale))
 
-    # Check if result is reasonable
-    if not np.isfinite(result) or error > 1e-3 * abs(result):
-        return np.nan
+        # Compute integral using mpmath's quad
+        result = mpmath.quad(
+            lambda p: compute_beta_three_parameter_distribution_integrand(
+                p, k_mp, alpha_mp, beta_mp, scale_mp
+            ),
+            [0, scale_mp],
+            method="tanh-sinh",  # Generally more accurate for this type of integral
+        )
 
-    return result
+        # Convert result back to float
+        return float(result)
+    except (ValueError, TypeError, mpmath.libmp.NoConvergence):
+        return float("nan")
 
 
 def compute_kumaraswamy_three_parameter_distribution_integrand(
@@ -319,8 +357,9 @@ def compute_scaling_exponent_from_distributional_fit(
     if distribution == "beta_two_parameter":
         raise NotImplementedError
     elif distribution == "beta_three_parameter":
-        distributional_fit_df["a"] = np.nan
-        distributional_fit_df["b"] = np.nan
+        distributional_fit_df["Log Power Law Prefactor"] = np.nan
+        distributional_fit_df["Power Law Prefactor"] = np.nan
+        distributional_fit_df["Power Law Exponent"] = np.nan
         integral_values = np.zeros_like(k_values, dtype=np.float64)
         for row_idx in range(len(distributional_fit_df)):
             for k_idx, k in enumerate(k_values):
@@ -351,12 +390,15 @@ def compute_scaling_exponent_from_distributional_fit(
                 target_col="Neg Log Score",
                 groupby_cols=["groupby_placeholder"],
             )
-            distributional_fit_df.loc[row_idx, "a"] = fitted_power_law_parameters_df[
-                "a"
-            ].values[0]
-            distributional_fit_df.loc[row_idx, "b"] = fitted_power_law_parameters_df[
-                "b"
-            ].values[0]
+            distributional_fit_df.loc[
+                row_idx, "Log Power Law Prefactor"
+            ] = fitted_power_law_parameters_df["Log Power Law Prefactor"].values[0]
+            distributional_fit_df.loc[
+                row_idx, "Power Law Prefactor"
+            ] = fitted_power_law_parameters_df["Power Law Prefactor"].values[0]
+            distributional_fit_df.loc[
+                row_idx, "Power Law Exponent"
+            ] = fitted_power_law_parameters_df["Power Law Exponent"].values[0]
 
     else:
         raise ValueError(f"Unknown distribution: {distribution}")
@@ -764,6 +806,66 @@ def create_or_load_large_language_monkeys_code_contests_pass_at_k_df(
         large_language_monkeys_code_contests_pass_at_k_df.shape,
     )
     return large_language_monkeys_code_contests_pass_at_k_df
+
+
+def create_or_load_large_language_monkeys_pythia_math_beta_binomial_mle_df(
+    raw_data_dir=f"{os.getcwd()}/data/raw_data",
+    processed_data_dir=f"{os.getcwd()}/data/processed_data",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    large_language_monkeys_pythia_math_beta_binomial_mle_df_path = os.path.join(
+        processed_data_dir,
+        "large_language_monkeys_pythia_math_beta_binomial_mle.parquet",
+    )
+    if refresh or not os.path.exists(
+        large_language_monkeys_pythia_math_beta_binomial_mle_df_path
+    ):
+        print(
+            f"Creating {large_language_monkeys_pythia_math_beta_binomial_mle_df_path} anew..."
+        )
+        llmonkeys_groupby_cols = ["Model", "Benchmark"]
+        llmonkeys_individual_outcomes_df = src.analyze.create_or_load_large_language_monkeys_pythia_math_individual_outcomes_df(
+            refresh=False,
+            # refresh=True,
+        )
+        llmonkeys_num_samples_and_num_successes_df = (
+            src.analyze.convert_individual_outcomes_to_num_samples_and_num_successes(
+                individual_outcomes_df=llmonkeys_individual_outcomes_df,
+                groupby_cols=llmonkeys_groupby_cols + ["Problem Idx"],
+            )
+        )
+
+        large_language_monkeys_pythia_math_beta_binomial_mle_df = (
+            llmonkeys_num_samples_and_num_successes_df.groupby(llmonkeys_groupby_cols)
+            .apply(
+                lambda df: src.analyze.fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
+                    num_samples_and_num_successes_df=df
+                )
+            )
+            .reset_index()
+        )
+
+        # Add scaling exponent numerically.
+        large_language_monkeys_pythia_math_beta_binomial_mle_df = src.analyze.compute_scaling_exponent_from_distributional_fit(
+            distributional_fit_df=large_language_monkeys_pythia_math_beta_binomial_mle_df,
+            distribution="beta_three_parameter",
+        )
+
+        large_language_monkeys_pythia_math_beta_binomial_mle_df.to_parquet(
+            large_language_monkeys_pythia_math_beta_binomial_mle_df_path,
+            index=False,
+        )
+
+        del large_language_monkeys_pythia_math_beta_binomial_mle_df
+
+    large_language_monkeys_pythia_math_beta_binomial_mle_df = pd.read_parquet(
+        large_language_monkeys_pythia_math_beta_binomial_mle_df_path
+    )
+    print(
+        f"Loaded {large_language_monkeys_pythia_math_beta_binomial_mle_df_path} with shape: ",
+        large_language_monkeys_pythia_math_beta_binomial_mle_df.shape,
+    )
+    return large_language_monkeys_pythia_math_beta_binomial_mle_df
 
 
 def create_or_load_large_language_monkeys_pythia_math_individual_outcomes_df(
@@ -1305,6 +1407,9 @@ def create_or_load_synthetic_scaling_coefficient_data_df(
                 {"a": 0.1, "b": 1.5},
                 {"a": 0.1, "b": 5.0},
             ],
+            # "kumaraswamy": [
+            #     {"a": 0.05, "b": 1.5},
+            # ]
             # "scaled_beta": [
             #     {"a": 0.5, "b": 1.0, "scale": 0.05},
             #     {"a": 0.5, "b": 1.0, "scale": 0.1},
@@ -1314,10 +1419,14 @@ def create_or_load_synthetic_scaling_coefficient_data_df(
             #     {"a": 0.5, "b": 5.0, "scale": 0.5},
             # ],
         }
+        fit_distributions = [
+            "beta",
+            "kumaraswamy",
+        ]
         num_problems_list: List[int] = [
             64,
             128,
-            256,
+            # 256,
         ]
         num_samples_per_problem_list: List[int] = [
             100,
@@ -1325,18 +1434,33 @@ def create_or_load_synthetic_scaling_coefficient_data_df(
             1000,
             3162,
             10000,
-            31623,
+            # 31623,
         ]
         max_num_samples_per_problem = max(num_samples_per_problem_list)
-        num_repeats = 30
+        num_repeats = 10
 
         scaling_exponents_dfs_list = []
-        for distribution in true_distribution_to_params_dict:
-            for distribution_params in true_distribution_to_params_dict[distribution]:
-                if distribution == "beta":
-                    theoretical_scaling_exponent = distribution_params["a"]
+        for true_distribution, fit_distribution in itertools.product(
+            true_distribution_to_params_dict, fit_distributions
+        ):
+            for true_distribution_params in true_distribution_to_params_dict[
+                true_distribution
+            ]:
+                if true_distribution == "beta":
+                    theoretical_scaling_exponent = true_distribution_params["a"]
+                    true_distribution_nice_str = f"Beta({true_distribution_params['a']}, {true_distribution_params['b']})"
+                elif true_distribution == "continuous_bernoulli":
+                    theoretical_scaling_exponent = 1.0
+                    true_distribution_nice_str = (
+                        f"Continuous Bernoulli({true_distribution_params['lam']})"
+                    )
+                elif true_distribution == "kumaraswamy":
+                    theoretical_scaling_exponent = true_distribution_params["a"]
+                    true_distribution_nice_str = f"Kumaraswamy({true_distribution_params['a']}, {true_distribution_params['b']})"
                 else:
-                    raise NotImplementedError(f"Unknown distribution: {distribution}")
+                    raise NotImplementedError(
+                        f"Unknown distribution: {true_distribution}"
+                    )
 
                 for num_problems, repeat_idx in itertools.product(
                     num_problems_list, range(num_repeats)
@@ -1346,32 +1470,33 @@ def create_or_load_synthetic_scaling_coefficient_data_df(
                         src.analyze.sample_synthetic_individual_outcomes_per_problem(
                             num_problems=num_problems,
                             num_samples_per_problem=max_num_samples_per_problem,
-                            distribution=distribution,
-                            distribution_parameters=distribution_params,
+                            distribution=true_distribution,
+                            distribution_parameters=true_distribution_params,
                         )
                     )
 
+                    # We want to emulate how real samples are collected.
                     for num_samples_per_problem in num_samples_per_problem_list:
                         subset_individual_outcomes_per_problem = (
                             individual_outcomes_per_problem[:, :num_samples_per_problem]
                         )
 
+                        ks_list: List[int] = (
+                            np.logspace(
+                                0,
+                                np.log10(num_samples_per_problem),
+                                num_samples_per_problem // 10,
+                            )
+                            .astype(int)
+                            .tolist()
+                        )
+
                         pass_at_k_df = src.analyze.compute_pass_at_k_from_individual_outcomes(
                             individual_outcomes_per_problem=subset_individual_outcomes_per_problem,
-                            ks_list=src.globals.BON_JAILBREAKING_Ks_LIST,
+                            ks_list=ks_list,
                         )
 
-                        # Extract pass_i@1 and then fit the distributional parameters.
-                        pass_at_1_df = pass_at_k_df[
-                            pass_at_k_df["Scaling Parameter"] == 1
-                        ]
-                        beta_fitted_power_law_parameters_df = (
-                            src.analyze.fit_pass_at_1_beta_distribution_parameters(
-                                data=pass_at_1_df["Score"].values,
-                                resolution=1.0 / num_samples_per_problem,
-                            )
-                        )
-
+                        # Method 1: Least-squares fit.
                         avg_pass_at_k_df = (
                             pass_at_k_df.groupby("Scaling Parameter")["Score"]
                             .mean()
@@ -1394,21 +1519,21 @@ def create_or_load_synthetic_scaling_coefficient_data_df(
                         scaling_exponents_dfs_list.append(
                             pd.DataFrame(
                                 {
-                                    "Distribution": [distribution],
-                                    "Distribution Parameters": [
-                                        str(distribution_params)
-                                    ],  # Can't hash a dict, so convert it to a string.
+                                    "True Distribution": [true_distribution_nice_str],
+                                    "Fit Distribution": [
+                                        fit_distribution
+                                    ],  # Placeholder.
                                     "Num. Problems": num_problems,
                                     r"Num. Samples per Problem ($n$)": [
                                         num_samples_per_problem
                                     ],
-                                    "Fit Scaling Exponent": [
+                                    "Power Law Exponent": [
                                         least_sqrs_fitted_power_law_parameters_df[
-                                            "b"
+                                            "Power Law Exponent"
                                         ].values[0]
                                     ],
                                     "Fit Method": "Least Squares",
-                                    "Theoretical Scaling Exponent": [
+                                    "Theoretical Power Law Exponent": [
                                         theoretical_scaling_exponent
                                     ],
                                     "Repeat Index": [repeat_idx],
@@ -1416,22 +1541,31 @@ def create_or_load_synthetic_scaling_coefficient_data_df(
                             )
                         )
 
+                        # Method 2: Distributional fit to pass_i@1.
+                        pass_at_1_df = pass_at_k_df[
+                            pass_at_k_df["Scaling Parameter"] == 1
+                        ]
+                        beta_fitted_power_law_parameters_df = (
+                            src.analyze.fit_pass_at_1_beta_distribution_parameters(
+                                data=pass_at_1_df["Score"].values,
+                                resolution=1.0 / num_samples_per_problem,
+                            )
+                        )
+
                         scaling_exponents_dfs_list.append(
                             pd.DataFrame(
                                 {
-                                    "Distribution": [distribution],
-                                    "Distribution Parameters": [
-                                        str(distribution_params)
-                                    ],  # Can't hash a dict, so convert it to a string.
+                                    "True Distribution": [true_distribution_nice_str],
+                                    "Fit Distribution": [fit_distribution],
                                     "Num. Problems": num_problems,
                                     r"Num. Samples per Problem ($n$)": [
                                         num_samples_per_problem
                                     ],
-                                    "Fit Scaling Exponent": [
+                                    "Power Law Exponent": [
                                         beta_fitted_power_law_parameters_df["alpha"]
                                     ],
                                     "Fit Method": "Distribution",
-                                    "Theoretical Scaling Exponent": [
+                                    "Theoretical Power Law Exponent": [
                                         theoretical_scaling_exponent
                                     ],
                                     "Repeat Index": [repeat_idx],
@@ -1443,8 +1577,15 @@ def create_or_load_synthetic_scaling_coefficient_data_df(
             scaling_exponents_dfs_list, ignore_index=True
         ).reset_index(drop=True)
         synthetic_scaling_exponents_df[r"$(\beta - \hat{\beta})^2$"] = 0.5 * np.square(
-            synthetic_scaling_exponents_df["Fit Scaling Exponent"]
-            - synthetic_scaling_exponents_df["Theoretical Scaling Exponent"]
+            synthetic_scaling_exponents_df["Power Law Exponent"]
+            - synthetic_scaling_exponents_df["Theoretical Power Law Exponent"]
+        )
+        synthetic_scaling_exponents_df["Relative Error"] = np.divide(
+            np.abs(
+                synthetic_scaling_exponents_df["Power Law Exponent"]
+                - synthetic_scaling_exponents_df["Theoretical Power Law Exponent"]
+            ),
+            synthetic_scaling_exponents_df["Theoretical Power Law Exponent"],
         )
         synthetic_scaling_exponents_df.to_parquet(
             path=synthetic_scaling_exponents_data_path
@@ -1497,17 +1638,28 @@ def estimate_pass_at_k(
 
 def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
     num_samples_and_num_successes_df: pd.DataFrame,
+    maxiter: int = 100,
+    epsilon: float = 1e-8,
 ) -> pd.Series:
+    num_data = len(num_samples_and_num_successes_df)
     num_samples = num_samples_and_num_successes_df["Num. Samples Total"].values
     num_successes = num_samples_and_num_successes_df["Num. Samples Correct"].values
-    largest_fraction_successes = np.max(np.divide(num_successes, num_samples))
-    initial_params = (0.5, 3.5, largest_fraction_successes)
+    fraction_successes = np.divide(num_successes, num_samples)
+    largest_fraction_successes = np.max(fraction_successes)
+    # Take reasonable starting initial parameters.
+    alpha, beta, _, c = scipy.stats.beta.fit(
+        fraction_successes[fraction_successes > 0],
+        floc=0.0,
+        fscale=largest_fraction_successes + epsilon,
+    )
+    # Inflate to correct for bias; is this correct?
+    smallest_scale = (num_data + 1.0) * largest_fraction_successes / num_data
+    initial_params = (alpha, beta, smallest_scale + epsilon)
     bounds = [
         (0.01, 100),
         (0.01, 100),
         (
-            largest_fraction_successes
-            + 1e-8,  # Scale can't be smaller than the largest fraction of successes.
+            smallest_scale,  # Scale can't be smaller than the largest fraction of successes.
             1.0,
         ),
     ]
@@ -1523,8 +1675,7 @@ def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
         bounds=bounds,
         method="L-BFGS-B",
         options=dict(
-            # maxiter=5000,
-            maxiter=10,
+            maxiter=maxiter,
             maxls=100,
             gtol=1e-6,  # Gradient tolerance, adjust as needed),
         ),
@@ -1540,9 +1691,9 @@ def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
             "aic": 2 * len(initial_params) + 2 * optimize_result.fun,
             "bic": len(initial_params) * np.log(len(num_samples_and_num_successes_df))
             + 2 * optimize_result.fun,
+            "maxiter": maxiter,
         }
     )
-    print(result)
 
     return result
 

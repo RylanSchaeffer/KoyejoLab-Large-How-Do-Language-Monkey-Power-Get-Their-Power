@@ -5,3 +5,5 @@
 data/raw_data/gpt4_gsm8k/pythia_gsm8k_log_likelihoods.csv
 data/raw_data/many_shot_jailbreaking/task_scary_evals_psychopathy__max_num_shots_300__num_examples_301.pkl
 data/raw_data/many_shot_jailbreaking/task_scary_evals_psychopathy__max_num_shots_300__num_examples_600.pkl
+
+tmp*.py
