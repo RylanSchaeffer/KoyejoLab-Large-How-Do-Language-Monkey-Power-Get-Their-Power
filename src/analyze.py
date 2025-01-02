@@ -449,6 +449,67 @@ def create_or_load_beta_distributions_pdf_df(
     return beta_distributions_pdf_df
 
 
+def create_or_load_bon_jailbreaking_beta_binomial_mle_df(
+    raw_data_dir=f"{os.getcwd()}/data/raw_data",
+    processed_data_dir=f"{os.getcwd()}/data/processed_data",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    bon_jailbreaking_beta_binomial_mle_df_path = os.path.join(
+        processed_data_dir,
+        "bon_jailbreaking_beta_binomial_mle.parquet",
+    )
+    if refresh or not os.path.exists(bon_jailbreaking_beta_binomial_mle_df_path):
+        print(f"Creating {bon_jailbreaking_beta_binomial_mle_df_path} anew...")
+        bon_jailbreaking_groupby_cols = ["Model", "Modality"]
+
+        bon_jailbreaking_individual_outcomes_df = src.analyze.create_or_load_bon_jailbreaking_individual_outcomes_df(
+            refresh=False,
+            # refresh=True,
+        )
+        bon_jailbreaking_num_samples_and_num_successes_df = (
+            src.analyze.convert_individual_outcomes_to_num_samples_and_num_successes(
+                individual_outcomes_df=bon_jailbreaking_individual_outcomes_df,
+                groupby_cols=bon_jailbreaking_groupby_cols + ["Problem Idx"],
+            )
+        )
+
+        bon_jailbreaking_beta_binomial_mle_df = (
+            bon_jailbreaking_num_samples_and_num_successes_df.groupby(
+                bon_jailbreaking_groupby_cols
+            )
+            .apply(
+                lambda df: src.analyze.fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
+                    num_samples_and_num_successes_df=df
+                )
+            )
+            .reset_index()
+        )
+
+        # Add scaling exponent numerically.
+        bon_jailbreaking_beta_binomial_mle_df = (
+            src.analyze.compute_scaling_exponent_from_distributional_fit(
+                distributional_fit_df=bon_jailbreaking_beta_binomial_mle_df,
+                distribution="beta_three_parameter",
+            )
+        )
+
+        bon_jailbreaking_beta_binomial_mle_df.to_parquet(
+            bon_jailbreaking_beta_binomial_mle_df_path,
+            index=False,
+        )
+
+        del bon_jailbreaking_beta_binomial_mle_df
+
+    bon_jailbreaking_beta_binomial_mle_df = pd.read_parquet(
+        bon_jailbreaking_beta_binomial_mle_df_path
+    )
+    print(
+        f"Loaded {bon_jailbreaking_beta_binomial_mle_df_path} with shape: ",
+        bon_jailbreaking_beta_binomial_mle_df.shape,
+    )
+    return bon_jailbreaking_beta_binomial_mle_df
+
+
 def create_or_load_bon_jailbreaking_individual_outcomes_df(
     raw_data_dir=f"{os.getcwd()}/data/raw_data",
     processed_data_dir=f"{os.getcwd()}/data/processed_data",
@@ -1609,7 +1670,7 @@ def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
     num_successes = num_samples_and_num_successes_df["Num. Samples Correct"].values
     fraction_successes = np.divide(num_successes, num_samples)
     largest_fraction_successes = np.max(fraction_successes)
-    # Take reasonable starting initial parameters.
+    # Take reasonable initial parameters.
     alpha, beta, _, c = scipy.stats.beta.fit(
         fraction_successes[fraction_successes > 0],
         floc=0.0,
@@ -1625,10 +1686,7 @@ def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
     bounds = [
         (0.01, 100),
         (0.01, 100),
-        (
-            smallest_scale,  # Scale can't be smaller than the largest fraction of successes.
-            1.0,
-        ),
+        (smallest_scale, 1.0),
     ]
 
     # Fit alpha, beta, scale to the scaled beta binomial
