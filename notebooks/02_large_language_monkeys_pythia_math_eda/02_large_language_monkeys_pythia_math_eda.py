@@ -18,8 +18,8 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
 )
 
 large_language_monkeys_pythia_math_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_pythia_math_pass_at_k_df(
-    refresh=False,
-    # refresh=True,
+    # refresh=False,
+    refresh=True,
 )
 
 
@@ -113,6 +113,8 @@ g = sns.relplot(
     y="Score",
     units="Problem Idx",
     hue="Model",
+    hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
+    style="Benchmark",
     col="Model",
     col_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
     col_wrap=4,
@@ -143,6 +145,7 @@ g = sns.relplot(
     units="Problem Idx",
     hue="Model",
     hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
+    style="Benchmark",
     col="Model",
     col_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
     col_wrap=4,
@@ -215,7 +218,7 @@ g.set(
 )
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))
-g.fig.suptitle("Large Language Monkeys")
+g.fig.suptitle("Large Language Monkeys (Benchmark = MATH)")
 g.fig.subplots_adjust(top=0.9)
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
