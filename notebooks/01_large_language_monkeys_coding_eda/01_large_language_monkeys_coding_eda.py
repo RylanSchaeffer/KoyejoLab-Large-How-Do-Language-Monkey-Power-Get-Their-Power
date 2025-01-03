@@ -17,15 +17,15 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
     refresh=False,
 )
 
-large_language_monkeys_coding_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_code_contests_pass_at_k_df(
-    refresh=False,
-    # refresh=True,
+large_language_monkeys_code_contests_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_code_contests_pass_at_k_df(
+    # refresh=False,
+    refresh=True,
 )
 
 plt.close()
 plt.figure(figsize=(10, 6))
 g = sns.lineplot(
-    data=large_language_monkeys_coding_pass_at_k_df,
+    data=large_language_monkeys_code_contests_pass_at_k_df,
     x="Scaling Parameter",
     y="Score",
     hue="Model",
@@ -47,7 +47,7 @@ src.plot.save_plot_with_multiple_extensions(
 # plt.show()
 
 large_language_monkeys_coding_neg_log_avg_pass_at_k_df = (
-    large_language_monkeys_coding_pass_at_k_df.groupby(
+    large_language_monkeys_code_contests_pass_at_k_df.groupby(
         ["Model", "Benchmark", "Scaling Parameter"]
     )["Score"]
     .mean()
@@ -106,12 +106,14 @@ src.plot.save_plot_with_multiple_extensions(
 
 plt.close()
 g = sns.relplot(
-    data=large_language_monkeys_coding_pass_at_k_df,
+    data=large_language_monkeys_code_contests_pass_at_k_df,
     kind="line",
     x="Scaling Parameter",
     y="Score",
     units="Problem Idx",
     hue="Model",
+    hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_CODING_MODELS_ORDER,
+    style="Benchmark",
     col="Model",
     col_order=src.globals.LARGE_LANGUAGE_MONKEYS_CODING_MODELS_ORDER,
     col_wrap=3,
@@ -135,13 +137,14 @@ src.plot.save_plot_with_multiple_extensions(
 
 plt.close()
 g = sns.relplot(
-    data=large_language_monkeys_coding_pass_at_k_df,
+    data=large_language_monkeys_code_contests_pass_at_k_df,
     kind="line",
     x="Scaling Parameter",
     y="Neg Log Score",
     units="Problem Idx",
     hue="Model",
     hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_CODING_MODELS_ORDER,
+    style="Benchmark",
     col="Model",
     col_order=src.globals.LARGE_LANGUAGE_MONKEYS_CODING_MODELS_ORDER,
     col_wrap=3,
@@ -180,8 +183,8 @@ src.plot.save_plot_with_multiple_extensions(
 
 plt.close()
 # Create better bins that handle zero and near-zero values
-smallest_nonzero_pass_at_1 = large_language_monkeys_coding_pass_at_k_df[
-    large_language_monkeys_coding_pass_at_k_df["Score"] > 0.0
+smallest_nonzero_pass_at_1 = large_language_monkeys_code_contests_pass_at_k_df[
+    large_language_monkeys_code_contests_pass_at_k_df["Score"] > 0.0
 ]["Score"].min()
 # Round smallest_nonzero_value to the nearest power of 10.
 smallest_nonzero_pass_at_1 = 10.0 ** np.floor(np.log10(smallest_nonzero_pass_at_1))
@@ -194,9 +197,12 @@ all_bins = np.concatenate(
     [[-small_value_for_plotting], [small_value_for_plotting], log_bins]
 )
 g = sns.displot(
-    data=large_language_monkeys_coding_pass_at_k_df[
-        (large_language_monkeys_coding_pass_at_k_df["Scaling Parameter"] == 1)
-        & (large_language_monkeys_coding_pass_at_k_df["Benchmark"] == "CodeContests")
+    data=large_language_monkeys_code_contests_pass_at_k_df[
+        (large_language_monkeys_code_contests_pass_at_k_df["Scaling Parameter"] == 1)
+        & (
+            large_language_monkeys_code_contests_pass_at_k_df["Benchmark"]
+            == "CodeContests"
+        )
     ],
     kind="hist",
     x="Score",
@@ -214,7 +220,7 @@ g.set(
 )
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))
-g.fig.suptitle("Large Language Monkeys")
+g.fig.suptitle("Large Language Monkeys (Benchmark = Code Contests)")
 g.fig.subplots_adjust(top=0.9)
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
@@ -222,4 +228,4 @@ src.plot.save_plot_with_multiple_extensions(
 )
 # plt.show()
 
-print("Finished notebooks/02_large_language_monkeys_pythia_math_eda.py!")
+print("Finished notebooks/01_large_language_monkeys_coding_eda!")
