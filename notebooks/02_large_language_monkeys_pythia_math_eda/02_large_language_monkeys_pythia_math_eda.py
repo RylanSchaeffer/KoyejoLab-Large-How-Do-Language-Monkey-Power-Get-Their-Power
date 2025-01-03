@@ -1,3 +1,5 @@
+import pprint
+
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 import numpy as np
@@ -68,7 +70,8 @@ large_language_monkeys_original_neg_log_avg_pass_at_k_df["Neg Log Score"] = -np.
     groupby_cols=["Model", "Benchmark"],
 )
 
-print("Fitted Power Laws Parameters: ", fitted_power_law_parameters_df)
+print("Fitted Power Laws Parameters: ")
+pprint.pprint(fitted_power_law_parameters_df)
 
 plt.close()
 plt.figure(figsize=(10, 6))

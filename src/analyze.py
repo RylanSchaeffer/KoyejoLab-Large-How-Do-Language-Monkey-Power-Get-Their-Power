@@ -1644,7 +1644,7 @@ def create_or_load_large_language_monkeys_pythia_math_pass_at_k_df(
     return large_language_monkeys_pythia_math_pass_at_k_df
 
 
-def create_or_load_large_language_monkeys_original_pass_at_1_beta_fits(
+def create_or_load_large_language_monkeys_pythia_math_pass_at_1_beta_fits(
     raw_data_dir=f"{os.getcwd()}/data/raw_data",
     processed_data_dir=f"{os.getcwd()}/data/processed_data",
     refresh: bool = False,
