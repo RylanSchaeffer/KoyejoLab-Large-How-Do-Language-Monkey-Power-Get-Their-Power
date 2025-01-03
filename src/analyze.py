@@ -336,22 +336,22 @@ def compute_scaling_exponent_from_distributional_fit(
                 -distributional_fit_df["alpha"].values[row_idx],
             )
 
-            import matplotlib.pyplot as plt
-            import seaborn as sns
-
-            plt.close()
-            g = sns.lineplot(
-                tmp_df,
-                x="Scaling Parameter",
-                y="Neg Log Score",
-            )
-            g = sns.lineplot(
-                tmp_df,
-                x="Scaling Parameter",
-                y="alpha Neg Log Score",
-            )
-            g.set(xscale="log", yscale="log")
-            plt.show()
+            # import matplotlib.pyplot as plt
+            # import seaborn as sns
+            #
+            # plt.close()
+            # g = sns.lineplot(
+            #     tmp_df,
+            #     x="Scaling Parameter",
+            #     y="Neg Log Score",
+            # )
+            # g = sns.lineplot(
+            #     tmp_df,
+            #     x="Scaling Parameter",
+            #     y="alpha Neg Log Score",
+            # )
+            # g.set(xscale="log", yscale="log")
+            # plt.show()
 
             # Fit a power law to the integral values.
             (
@@ -858,191 +858,45 @@ def create_or_load_cross_validated_large_language_monkey_pythia_math_scaling_coe
         )
         os.makedirs(processed_data_dir, exist_ok=True)
 
-        # High level sketch:
-        # 1. Load individual outcomes.
-        # 2. Compute the scaling coefficients using all data as the "true" coefficient.
-        # 2. Sweep over the number of samples per problem, computing pass_i@k for many k.
-        # 3. Fit the distributional parameters to the synthetic data.
-        # 4. Compute the scaling exponent from the distributional fits.
-
+        # Load the individual outcomes per problem.
         individual_outcomes_per_problem_df = (
             create_or_load_large_language_monkeys_pythia_math_individual_outcomes_df(
                 refresh=False
             )
         )
 
-        unique_problem_indices = individual_outcomes_per_problem_df[
-            "Problem Idx"
-        ].unique()
-        unique_attempt_indices = individual_outcomes_per_problem_df[
-            "Attempt Idx"
-        ].unique()
-
-        num_problems_list: List[int] = [
-            64,
-            96,
-            128,
-        ]
-        num_samples_per_problem_list: List[int] = [
-            100,
-            316,
-            1000,
-            3162,
-            10000,
-        ]
-        max_num_samples_per_problem = max(num_samples_per_problem_list)
-        num_repeats = 10
-
-        for num_problems, repeat_idx in itertools.product(
-            num_problems_list, range(num_repeats)
+        dfs_list = []
+        for (
+            model,
+            benchmark,
+        ), subset_individual_outcomes_per_problem_df in individual_outcomes_per_problem_df.groupby(
+            src.globals.LARGE_LANGUAGE_MONKEYS_GROUPBY_COLS
         ):
-            # We want to emulate how real samples are collected.
-            for num_samples_per_problem in num_samples_per_problem_list:
-                problems_subset = np.random.choice(
-                    unique_problem_indices,
-                    size=num_problems,
-                    replace=False,
-                ).astype(int)
-                attempts_subset = np.random.choice(
-                    unique_attempt_indices,
-                    size=num_samples_per_problem,
-                    replace=False,
-                ).astype(int)
+            cv_power_law_coefficient_estimation_df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
+                individual_outcomes_per_problem_df=subset_individual_outcomes_per_problem_df,
+            )
+            cv_power_law_coefficient_estimation_df["Model"] = model
+            cv_power_law_coefficient_estimation_df["Benchmark"] = benchmark
+            dfs_list.append(cv_power_law_coefficient_estimation_df)
 
-                subset_individual_outcomes_per_problem_df = (
-                    individual_outcomes_per_problem_df[
-                        (
-                            individual_outcomes_per_problem_df["Problem Idx"].isin(
-                                problems_subset
-                            )
-                        )
-                        & (
-                            individual_outcomes_per_problem_df["Attempt Idx"].isin(
-                                attempts_subset
-                            )
-                        )
-                    ]
-                )
-                subset_individual_outcomes_per_problem = (
-                    subset_individual_outcomes_per_problem_df.pivot(
-                        columns="Attempt Idx", index="Problem Idx", values="Score"
-                    ).values
-                )
-
-                ks_list: List[int] = (
-                    np.logspace(
-                        0,
-                        np.log10(num_samples_per_problem),
-                        num_samples_per_problem // 10,
-                    )
-                    .astype(int)
-                    .tolist()
-                )
-
-                pass_at_k_df = src.analyze.compute_pass_at_k_from_individual_outcomes(
-                    individual_outcomes_per_problem=subset_individual_outcomes_per_problem,
-                    ks_list=ks_list,
-                )
-
-                # Method 1: Least-squares fit.
-                avg_pass_at_k_df = (
-                    pass_at_k_df.groupby("Scaling Parameter")["Score"]
-                    .mean()
-                    .reset_index()
-                )
-                avg_pass_at_k_df["Neg Log Score"] = -np.log(avg_pass_at_k_df["Score"])
-                avg_pass_at_k_df["Placeholder"] = "Placeholder"
-                (
-                    _,
-                    least_sqrs_fitted_power_law_parameters_df,
-                ) = src.analyze.fit_power_law(
-                    df=avg_pass_at_k_df,
-                    covariate_col="Scaling Parameter",
-                    target_col="Neg Log Score",
-                    groupby_cols=["Placeholder"],
-                )
-
-                scaling_exponents_dfs_list.append(
-                    pd.DataFrame(
-                        {
-                            "True Distribution": [true_distribution_nice_str],
-                            "Fit Distribution": [fit_distribution],  # Placeholder.
-                            "Num. Problems": num_problems,
-                            r"Num. Samples per Problem ($n$)": [
-                                num_samples_per_problem
-                            ],
-                            "Power Law Exponent": [
-                                least_sqrs_fitted_power_law_parameters_df[
-                                    "Power Law Exponent"
-                                ].values[0]
-                            ],
-                            "Fit Method": "Least Squares",
-                            "Theoretical Power Law Exponent": [
-                                theoretical_scaling_exponent
-                            ],
-                            "Repeat Index": [repeat_idx],
-                        }
-                    )
-                )
-
-                # Method 2: Distributional fit to pass_i@1.
-                pass_at_1_df = pass_at_k_df[pass_at_k_df["Scaling Parameter"] == 1]
-                beta_fitted_power_law_parameters_df = (
-                    src.analyze.fit_pass_at_1_beta_distribution_parameters(
-                        data=pass_at_1_df["Score"].values,
-                        resolution=1.0 / num_samples_per_problem,
-                    )
-                )
-
-                scaling_exponents_dfs_list.append(
-                    pd.DataFrame(
-                        {
-                            "True Distribution": [true_distribution_nice_str],
-                            "Fit Distribution": [fit_distribution],
-                            "Num. Problems": num_problems,
-                            r"Num. Samples per Problem ($n$)": [
-                                num_samples_per_problem
-                            ],
-                            "Power Law Exponent": [
-                                beta_fitted_power_law_parameters_df["alpha"]
-                            ],
-                            "Fit Method": "Distribution",
-                            "Theoretical Power Law Exponent": [
-                                theoretical_scaling_exponent
-                            ],
-                            "Repeat Index": [repeat_idx],
-                        }
-                    )
-                )
-
-        synthetic_scaling_exponents_df = pd.concat(
-            scaling_exponents_dfs_list, ignore_index=True
-        ).reset_index(drop=True)
-        synthetic_scaling_exponents_df[r"$(\beta - \hat{\beta})^2$"] = 0.5 * np.square(
-            synthetic_scaling_exponents_df["Power Law Exponent"]
-            - synthetic_scaling_exponents_df["Theoretical Power Law Exponent"]
+        cv_large_language_monkeys_pythia_math_scaling_coefficient_df = pd.concat(
+            dfs_list
         )
-        synthetic_scaling_exponents_df["Relative Error"] = np.divide(
-            np.abs(
-                synthetic_scaling_exponents_df["Power Law Exponent"]
-                - synthetic_scaling_exponents_df["Theoretical Power Law Exponent"]
-            ),
-            synthetic_scaling_exponents_df["Theoretical Power Law Exponent"],
-        )
-        synthetic_scaling_exponents_df.to_parquet(
+
+        cv_large_language_monkeys_pythia_math_scaling_coefficient_df.to_parquet(
             path=cv_large_language_monkeys_pythia_math_scaling_coefficient_df_path
         )
-        del synthetic_scaling_exponents_df
+        del cv_large_language_monkeys_pythia_math_scaling_coefficient_df
 
-    synthetic_scaling_exponents_df = pd.read_parquet(
+    cv_large_language_monkeys_pythia_math_scaling_coefficient_df = pd.read_parquet(
         cv_large_language_monkeys_pythia_math_scaling_coefficient_df_path
     )
 
     print(
         f"Loaded {cv_large_language_monkeys_pythia_math_scaling_coefficient_df_path} with shape: ",
-        synthetic_scaling_exponents_df.shape,
+        cv_large_language_monkeys_pythia_math_scaling_coefficient_df.shape,
     )
-    return synthetic_scaling_exponents_df
+    return cv_large_language_monkeys_pythia_math_scaling_coefficient_df
 
 
 def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
@@ -2011,6 +1865,227 @@ def create_or_load_pretraining_probability_df(
     return pretraining_probability_df
 
 
+def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
+    individual_outcomes_per_problem_df: pd.DataFrame,
+    num_problems_list: Optional[List[int]] = None,
+    num_samples_per_problem_list: Optional[List[int]] = None,
+    num_repeats: int = 10,
+) -> pd.DataFrame:
+    unique_problem_indices = individual_outcomes_per_problem_df["Problem Idx"].unique()
+    unique_attempt_indices = individual_outcomes_per_problem_df["Attempt Idx"].unique()
+
+    if num_problems_list is None:
+        num_problems_list = [
+            64,
+            96,
+            128,
+        ]
+        assert len(unique_problem_indices) <= 128
+    if num_samples_per_problem_list is None:
+        num_samples_per_problem_list = [
+            100,
+            316,
+            1000,
+            3162,
+            10000,
+        ]
+        assert len(unique_attempt_indices) <= 10000
+
+    max_num_samples_per_problem = max(num_samples_per_problem_list)
+
+    individual_outcomes_per_problem: np.ndarray = (
+        individual_outcomes_per_problem_df.pivot(
+            index="Problem Idx",
+            columns="Attempt Idx",
+            values="Score",
+        ).values
+    )
+
+    ks_list: List[int] = (
+        np.logspace(
+            0,
+            np.log10(max_num_samples_per_problem),
+            max_num_samples_per_problem // 10,
+        )
+        .astype(int)
+        .tolist()
+    )
+
+    # Step 1: Compute the "true" power law exponent using least-squares fitting on all the data.
+    pass_at_k_df = src.analyze.compute_pass_at_k_from_individual_outcomes(
+        individual_outcomes_per_problem=individual_outcomes_per_problem,
+        ks_list=ks_list,
+    )
+    avg_pass_at_k_df = (
+        pass_at_k_df.groupby("Scaling Parameter")["Score"].mean().reset_index()
+    )
+    avg_pass_at_k_df["Neg Log Score"] = -np.log(avg_pass_at_k_df["Score"])
+    avg_pass_at_k_df["Placeholder"] = "Placeholder"
+    (
+        _,
+        least_sqrs_fitted_power_law_parameters_df,
+    ) = src.analyze.fit_power_law(
+        df=avg_pass_at_k_df,
+        covariate_col="Scaling Parameter",
+        target_col="Neg Log Score",
+        groupby_cols=["Placeholder"],
+    )
+
+    # Note: These aren't actually the true parameters but we will treat them as true for our analysis.
+    # true_log_power_law_prefactor = least_sqrs_fitted_power_law_parameters_df[
+    #     "Log Power Law Prefactor"
+    # ].values[0]
+    # true_power_law_prefactor = least_sqrs_fitted_power_law_parameters_df[
+    #     "Power Law Prefactor"
+    # ].values[0]
+    true_power_law_exponent = least_sqrs_fitted_power_law_parameters_df[
+        "Power Law Exponent"
+    ].values[0]
+
+    # Clean up.
+    del pass_at_k_df, avg_pass_at_k_df, least_sqrs_fitted_power_law_parameters_df
+
+    # Step 2: Take subsets of problems and samples per problem and repeats.
+    scaling_exponents_dfs_list = []
+    for num_problems, num_samples_per_problem, repeat_idx in itertools.product(
+        num_problems_list, num_samples_per_problem_list, range(num_repeats)
+    ):
+        problems_subset_indices = np.random.choice(
+            individual_outcomes_per_problem.shape[0],
+            size=num_problems,
+            replace=False,
+        ).astype(int)
+        samples_subset_indices = np.random.choice(
+            individual_outcomes_per_problem.shape[1],
+            size=num_samples_per_problem,
+            replace=False,
+        ).astype(int)
+        subset_individual_outcomes_per_problem = individual_outcomes_per_problem[
+            np.ix_(problems_subset_indices, samples_subset_indices)
+        ]
+
+        ks_list: List[int] = np.unique(
+            np.logspace(
+                0,
+                np.log10(num_samples_per_problem),
+                num_samples_per_problem // 10,
+            ).astype(int)
+        ).tolist()
+
+        subset_pass_at_k_df = src.analyze.compute_pass_at_k_from_individual_outcomes(
+            individual_outcomes_per_problem=subset_individual_outcomes_per_problem,
+            ks_list=ks_list,
+        )
+
+        # Method 1: Least-squares fit.
+        subset_avg_pass_at_k_df = (
+            subset_pass_at_k_df.groupby("Scaling Parameter")["Score"]
+            .mean()
+            .reset_index()
+        )
+        subset_avg_pass_at_k_df["Neg Log Score"] = -np.log(
+            subset_avg_pass_at_k_df["Score"]
+        )
+        subset_avg_pass_at_k_df["Placeholder"] = "Placeholder"
+        (
+            _,
+            subset_least_sqrs_fitted_power_law_parameters_df,
+        ) = src.analyze.fit_power_law(
+            df=subset_avg_pass_at_k_df,
+            covariate_col="Scaling Parameter",
+            target_col="Neg Log Score",
+            groupby_cols=["Placeholder"],
+        )
+
+        scaling_exponents_dfs_list.append(
+            pd.DataFrame(
+                {
+                    "Num. Problems": num_problems,
+                    r"Num. Samples per Problem ($n$)": [num_samples_per_problem],
+                    "Power Law Exponent": [
+                        subset_least_sqrs_fitted_power_law_parameters_df[
+                            "Power Law Exponent"
+                        ].values[0]
+                    ],
+                    "Fit Method": "Least Squares",
+                    "True Power Law Exponent": [true_power_law_exponent],
+                    "Repeat Index": [repeat_idx],
+                }
+            )
+        )
+
+        # Method 2: Distributional fit to pass_i@1.
+        subset_individual_outcomes_per_problem_df = individual_outcomes_per_problem_df[
+            (
+                individual_outcomes_per_problem_df["Problem Idx"].isin(
+                    unique_problem_indices[problems_subset_indices]
+                )
+            )
+            & (
+                individual_outcomes_per_problem_df["Attempt Idx"].isin(
+                    unique_attempt_indices[samples_subset_indices]
+                )
+            )
+        ]
+        subset_num_samples_and_num_successes_df = (
+            src.analyze.convert_individual_outcomes_to_num_samples_and_num_successes(
+                individual_outcomes_df=subset_individual_outcomes_per_problem_df,
+                groupby_cols=["Problem Idx"],
+            )
+        )
+
+        subset_beta_binomial_mle_df = pd.DataFrame(
+            src.analyze.fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
+                num_samples_and_num_successes_df=subset_num_samples_and_num_successes_df
+            )
+        ).T
+
+        # Add power law exponent numerically.
+        subset_beta_binomial_mle_df = (
+            src.analyze.compute_scaling_exponent_from_distributional_fit(
+                distributional_fit_df=subset_beta_binomial_mle_df,
+                distribution="beta_three_parameter",
+            )
+        )
+
+        scaling_exponents_dfs_list.append(
+            pd.DataFrame(
+                {
+                    "Num. Problems": num_problems,
+                    r"Num. Samples per Problem ($n$)": [num_samples_per_problem],
+                    "Power Law Exponent": [
+                        subset_beta_binomial_mle_df["Power Law Exponent"]
+                    ],
+                    "Fit Method": "Distribution",
+                    "True Power Law Exponent": [true_power_law_exponent],
+                    "Repeat Index": [repeat_idx],
+                }
+            )
+        )
+
+    cross_validated_power_law_coefficient_estimators_df = pd.concat(
+        scaling_exponents_dfs_list, ignore_index=True
+    ).reset_index(drop=True)
+    cross_validated_power_law_coefficient_estimators_df[
+        r"$(\beta - \hat{\beta})^2$"
+    ] = 0.5 * np.square(
+        cross_validated_power_law_coefficient_estimators_df["Power Law Exponent"]
+        - cross_validated_power_law_coefficient_estimators_df[
+            "Theoretical Power Law Exponent"
+        ]
+    )
+    cross_validated_power_law_coefficient_estimators_df["Relative Error"] = np.divide(
+        np.abs(
+            cross_validated_power_law_coefficient_estimators_df["Power Law Exponent"]
+            - cross_validated_power_law_coefficient_estimators_df[
+                "True Power Law Exponent"
+            ]
+        ),
+        cross_validated_power_law_coefficient_estimators_df["True Power Law Exponent"],
+    )
+    return cross_validated_power_law_coefficient_estimators_df
+
+
 def estimate_pass_at_k(
     num_samples_total: Union[int, List[int], np.ndarray],
     num_samples_correct: Union[List[int], np.ndarray],
@@ -2120,7 +2195,6 @@ def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
             "maxiter": maxiter,
         }
     )
-    print(result)
     return result
 
 
