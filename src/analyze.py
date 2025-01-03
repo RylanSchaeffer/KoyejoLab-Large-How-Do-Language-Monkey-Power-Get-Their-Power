@@ -1062,7 +1062,7 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
     refresh: bool = False,
 ) -> pd.DataFrame:
     synthetic_scaling_exponents_data_path = os.path.join(
-        processed_data_dir, "synthetic_scaling_coefficient.parquet"
+        processed_data_dir, "cv_synthetic_scaling_coefficient.parquet"
     )
 
     if refresh or not os.path.exists(synthetic_scaling_exponents_data_path):
@@ -1070,7 +1070,6 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
         os.makedirs(processed_data_dir, exist_ok=True)
 
         # High level sketch:
-        # 1. Generate synthetic data, sweeping over multiple true distributions and distributional parameters.
         # 2. Sweep over the number of samples per problem, computing pass_i@k for many k.
         # 3. Fit the distributional parameters to the synthetic data.
         # 4. Compute the scaling exponent from the distributional fits.
@@ -1098,21 +1097,6 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
             "beta",
             "kumaraswamy",
         ]
-        num_problems_list: List[int] = [
-            64,
-            128,
-            # 256,
-        ]
-        num_samples_per_problem_list: List[int] = [
-            100,
-            316,
-            1000,
-            3162,
-            10000,
-            # 31623,
-        ]
-        max_num_samples_per_problem = max(num_samples_per_problem_list)
-        num_repeats = 10
 
         scaling_exponents_dfs_list = []
         for true_distribution, fit_distribution in itertools.product(
@@ -1121,146 +1105,54 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
             for true_distribution_params in true_distribution_to_params_dict[
                 true_distribution
             ]:
+                # 1. Generate synthetic data, sweeping over multiple true distributions and distributional parameters.
                 if true_distribution == "beta":
-                    theoretical_scaling_exponent = true_distribution_params["a"]
+                    true_scaling_exponent = true_distribution_params["a"]
                     true_distribution_nice_str = f"Beta({true_distribution_params['a']}, {true_distribution_params['b']})"
+
                 elif true_distribution == "continuous_bernoulli":
-                    theoretical_scaling_exponent = 1.0
+                    true_scaling_exponent = 1.0
                     true_distribution_nice_str = (
                         f"Continuous Bernoulli({true_distribution_params['lam']})"
                     )
                 elif true_distribution == "kumaraswamy":
-                    theoretical_scaling_exponent = true_distribution_params["a"]
+                    true_scaling_exponent = true_distribution_params["a"]
                     true_distribution_nice_str = f"Kumaraswamy({true_distribution_params['a']}, {true_distribution_params['b']})"
                 else:
                     raise NotImplementedError(
                         f"Unknown distribution: {true_distribution}"
                     )
 
-                for num_problems, repeat_idx in itertools.product(
-                    num_problems_list, range(num_repeats)
-                ):
-                    # Shape: (num_problems, max num samples per problem)
-                    individual_outcomes_per_problem = (
-                        src.analyze.sample_synthetic_individual_outcomes_per_problem(
-                            num_problems=num_problems,
-                            num_samples_per_problem=max_num_samples_per_problem,
+                for _ in np.arange(10, dtype=int):
+                    individual_outcomes_per_problem_df = (
+                        sample_synthetic_individual_outcomes_per_problem_df(
+                            num_problems=512,
+                            num_samples_per_problem=16000,
                             distribution=true_distribution,
                             distribution_parameters=true_distribution_params,
                         )
                     )
-
-                    # We want to emulate how real samples are collected.
-                    for num_samples_per_problem in num_samples_per_problem_list:
-                        subset_individual_outcomes_per_problem = (
-                            individual_outcomes_per_problem[:, :num_samples_per_problem]
-                        )
-
-                        ks_list: List[int] = (
-                            np.logspace(
-                                0,
-                                np.log10(num_samples_per_problem),
-                                num_samples_per_problem // 10,
-                            )
-                            .astype(int)
-                            .tolist()
-                        )
-
-                        pass_at_k_df = src.analyze.compute_pass_at_k_from_individual_outcomes(
-                            individual_outcomes_per_problem=subset_individual_outcomes_per_problem,
-                            ks_list=ks_list,
-                        )
-
-                        # Method 1: Least-squares fit.
-                        avg_pass_at_k_df = (
-                            pass_at_k_df.groupby("Scaling Parameter")["Score"]
-                            .mean()
-                            .reset_index()
-                        )
-                        avg_pass_at_k_df["Neg Log Score"] = -np.log(
-                            avg_pass_at_k_df["Score"]
-                        )
-                        avg_pass_at_k_df["Placeholder"] = "Placeholder"
-                        (
-                            _,
-                            least_sqrs_fitted_power_law_parameters_df,
-                        ) = src.analyze.fit_power_law(
-                            df=avg_pass_at_k_df,
-                            covariate_col="Scaling Parameter",
-                            target_col="Neg Log Score",
-                            groupby_cols=["Placeholder"],
-                        )
-
-                        scaling_exponents_dfs_list.append(
-                            pd.DataFrame(
-                                {
-                                    "True Distribution": [true_distribution_nice_str],
-                                    "Fit Distribution": [
-                                        fit_distribution
-                                    ],  # Placeholder.
-                                    "Num. Problems": num_problems,
-                                    r"Num. Samples per Problem ($n$)": [
-                                        num_samples_per_problem
-                                    ],
-                                    "Power Law Exponent": [
-                                        least_sqrs_fitted_power_law_parameters_df[
-                                            "Power Law Exponent"
-                                        ].values[0]
-                                    ],
-                                    "Fit Method": "Least Squares",
-                                    "Theoretical Power Law Exponent": [
-                                        theoretical_scaling_exponent
-                                    ],
-                                    "Repeat Index": [repeat_idx],
-                                }
-                            )
-                        )
-
-                        # Method 2: Distributional fit to pass_i@1.
-                        pass_at_1_df = pass_at_k_df[
-                            pass_at_k_df["Scaling Parameter"] == 1
-                        ]
-                        beta_fitted_power_law_parameters_df = (
-                            src.analyze.fit_pass_at_1_beta_distribution_parameters(
-                                data=pass_at_1_df["Score"].values,
-                                resolution=1.0 / num_samples_per_problem,
-                            )
-                        )
-
-                        scaling_exponents_dfs_list.append(
-                            pd.DataFrame(
-                                {
-                                    "True Distribution": [true_distribution_nice_str],
-                                    "Fit Distribution": [fit_distribution],
-                                    "Num. Problems": num_problems,
-                                    r"Num. Samples per Problem ($n$)": [
-                                        num_samples_per_problem
-                                    ],
-                                    "Power Law Exponent": [
-                                        beta_fitted_power_law_parameters_df["alpha"]
-                                    ],
-                                    "Fit Method": "Distribution",
-                                    "Theoretical Power Law Exponent": [
-                                        theoretical_scaling_exponent
-                                    ],
-                                    "Repeat Index": [repeat_idx],
-                                }
-                            )
-                        )
+                    df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
+                        individual_outcomes_per_problem_df=individual_outcomes_per_problem_df,
+                    )
+                    df["True Distribution"] = true_distribution_nice_str
+                    df["True Power Law Exponent"] = true_scaling_exponent
+                    scaling_exponents_dfs_list.append(df)
 
         synthetic_scaling_exponents_df = pd.concat(
             scaling_exponents_dfs_list, ignore_index=True
         ).reset_index(drop=True)
+
         synthetic_scaling_exponents_df[r"$(\beta - \hat{\beta})^2$"] = 0.5 * np.square(
             synthetic_scaling_exponents_df["Power Law Exponent"]
-            - synthetic_scaling_exponents_df["Theoretical Power Law Exponent"]
+            - synthetic_scaling_exponents_df["True Power Law Exponent"]
         )
         synthetic_scaling_exponents_df["Relative Error"] = np.divide(
             np.abs(
                 synthetic_scaling_exponents_df["Power Law Exponent"]
-                - synthetic_scaling_exponents_df["Theoretical Power Law Exponent"]
+                - synthetic_scaling_exponents_df["True Power Law Exponent"]
             ),
-            synthetic_scaling_exponents_df["Theoretical Power Law Exponent"],
+            synthetic_scaling_exponents_df["True Power Law Exponent"],
         )
         synthetic_scaling_exponents_df.to_parquet(
             path=synthetic_scaling_exponents_data_path
@@ -2106,7 +1998,7 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
             96,
             # 128,
         ]
-        assert len(unique_problem_indices) <= 128
+        assert max(num_problems_list) <= len(unique_problem_indices)
     if num_samples_per_problem_list is None:
         num_samples_per_problem_list = [
             100,
@@ -2115,7 +2007,7 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
             # 3162,
             # 10000,
         ]
-        assert len(unique_attempt_indices) <= 10000
+        assert max(num_samples_per_problem_list) <= len(unique_attempt_indices)
 
     max_num_samples_per_problem = max(num_samples_per_problem_list)
 
@@ -2872,12 +2764,12 @@ def fit_power_law(
     return df_with_predictions, fitted_power_law_parameters_df
 
 
-def sample_synthetic_individual_outcomes_per_problem(
+def sample_synthetic_individual_outcomes_per_problem_df(
     num_problems: int,
     num_samples_per_problem: int,
     distribution: str,
     distribution_parameters: Dict[str, float],
-) -> np.ndarray:
+) -> pd.DataFrame:
     if distribution == "beta":
         true_pass_at_1_per_problem = scipy.stats.beta.rvs(
             a=distribution_parameters["a"],
@@ -2896,4 +2788,14 @@ def sample_synthetic_individual_outcomes_per_problem(
     else:
         raise NotImplementedError
 
-    return individual_outcomes
+    # Convert to a DataFrame with columns "Problem Idx" and "Attempt Idx".
+    problem_idx = np.repeat(np.arange(num_problems), num_samples_per_problem)
+    attempt_idx = np.tile(np.arange(num_samples_per_problem), num_problems)
+    individual_outcomes_per_problem_df = pd.DataFrame(
+        {
+            "Problem Idx": problem_idx,
+            "Attempt Idx": attempt_idx,
+            "Score": individual_outcomes.flatten(),
+        }
+    )
+    return individual_outcomes_per_problem_df

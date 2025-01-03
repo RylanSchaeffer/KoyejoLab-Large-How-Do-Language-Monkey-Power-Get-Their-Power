@@ -19,8 +19,8 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
 )
 
 cv_synthetic_scaling_exponents_df = src.analyze.create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
-    refresh=False,
-    # refresh=True,
+    # refresh=False,
+    refresh=True,
 )
 
 
