@@ -25,7 +25,8 @@ pd.set_option("display.expand_frame_repr", False)
 
 
 def compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
-    params: Tuple[float, float, float],
+    params: Tuple[float, float],
+    scale: float,
     num_samples: np.ndarray,
     num_successes: np.ndarray,
 ) -> float:
@@ -35,19 +36,12 @@ def compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
     P(X=x) = binom(n, x) * [c^x / B(alpha, beta)] * B(x + alpha, beta) * _2F_1(arguments).
     """
 
-    alpha, beta, scale = params
+    alpha, beta = params
     # scale = np.max(np.divide(num_successes, num_samples)) + 1e-16
     nll_arr = np.zeros_like(num_samples, dtype=np.float64)
     for idx, (n, x) in enumerate(zip(num_samples, num_successes)):
         if not (0 <= x <= n):
             return 0.0
-
-        # def integrand(z):
-        #     return (
-        #         z ** (x + alpha - 1.0)
-        #         * (1.0 - z) ** (beta - 1.0)
-        #         * (1.0 - scale * z) ** (n - x)
-        #     )
 
         # binomial coefficient binom(n, x)
         binom_factor = mpmath.binomial(int(n), int(x))
@@ -72,10 +66,7 @@ def compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
             # nmaxterms=2000000,
             # method="a+bt",
         )
-        # f = flint.arb(scale).hypgeom_2f1(float(-(n - x)), x + alpha, x + alpha + beta)
         pmf = binom_factor * c_to_x * B_xa_b * f / B_a_b
-        # val = mpmath.quad(integrand, [0, 1])
-        # pmf = binom_factor * c_to_x * val / B_a_b
         nll = -mpmath.log(pmf)
         nll_arr[idx] = float(nll)
 
@@ -122,15 +113,16 @@ def compute_beta_three_parameter_distribution_integrand(
 
     # Compute in log space for numerical stability
     log_term1 = k * mpmath.log1p(-p)
-    log_term2 = (alpha - 1) * mpmath.log(p)
-    log_term3 = (beta - 1) * mpmath.log(c - p)
-    log_term4 = -(alpha + beta - 1) * mpmath.log(c)
+    log_term2 = (alpha - 1.0) * mpmath.log(p)
+    log_term3 = (beta - 1.0) * mpmath.log(c - p)
+    log_term4 = (alpha + beta - 1) * mpmath.log(c)
     log_term5 = (
-        -mpmath.loggamma(alpha) - mpmath.loggamma(beta) + mpmath.loggamma(alpha + beta)
+        mpmath.loggamma(alpha) + mpmath.loggamma(beta) - mpmath.loggamma(alpha + beta)
     )
 
-    log_result = log_term1 + log_term2 + log_term3 + log_term4 + log_term5
-    return mpmath.exp(log_result)
+    log_result = log_term1 + log_term2 + log_term3 - log_term4 - log_term5
+    result = mpmath.exp(log_result)
+    return result
 
 
 def compute_beta_three_parameter_distribution_integral(
@@ -149,31 +141,23 @@ def compute_beta_three_parameter_distribution_integral(
     Returns:
         Result of the integral or nan if parameters are invalid
     """
-    # Set precision
-    mpmath.mp.dps = dps
 
     # Parameter validation
     if not (0 < scale < 1 and alpha > 0 and beta > 0):
-        return float("nan")
+        raise ValueError("Invalid parameters")
 
     try:
-        # Convert parameters to mpmath types
-        k_mp = mpmath.mpf(str(k))
-        alpha_mp = mpmath.mpf(str(alpha))
-        beta_mp = mpmath.mpf(str(beta))
-        scale_mp = mpmath.mpf(str(scale))
+        # Precompute constant factors (to avoid repeating in integrand)
+        denom = (scale ** (alpha + beta - 1)) * mpmath.beta(alpha, beta)
 
-        # Compute integral using mpmath's quad
-        result = mpmath.quad(
-            lambda p: compute_beta_three_parameter_distribution_integrand(
-                p, k_mp, alpha_mp, beta_mp, scale_mp
-            ),
-            [0, scale_mp],
-            method="tanh-sinh",  # Generally more accurate for this type of integral
-        )
+        def integrand(p):
+            return (
+                (1.0 - p) ** k * p ** (alpha - 1.0) * (scale - p) ** (beta - 1.0)
+            ) / denom
 
-        # Convert result back to float
-        return float(result)
+        integral = mpmath.quad(integrand, [0, scale])
+        assert integral < 1.0
+        return float(integral)
     except (ValueError, TypeError, mpmath.libmp.NoConvergence):
         return float("nan")
 
@@ -313,7 +297,7 @@ def compute_scaling_exponent_from_distributional_fit(
     k_values: Optional[Union[np.ndarray, List[float]]] = None,
 ) -> pd.DataFrame:
     if k_values is None:
-        k_values = np.logspace(0, 5, 25, dtype=int)
+        k_values = np.unique(np.logspace(0, 5, 10, dtype=int))
     if isinstance(k_values, list):
         k_values = np.array(k_values)
 
@@ -335,13 +319,39 @@ def compute_scaling_exponent_from_distributional_fit(
                     scale=distributional_fit_df["scale"].values[row_idx],
                 )
 
+            assert np.all(0.0 <= integral_values)
+            assert np.all(integral_values <= 1.0)
+
             tmp_df = pd.DataFrame.from_dict(
                 {
                     "Scaling Parameter": k_values,
-                    "Neg Log Score": -np.log(1.0 - integral_values),
+                    "Neg Log Score": -np.log1p(-integral_values),
                     "groupby_placeholder": ["placeholder"] * len(k_values),
                 }
             )
+            tmp_df["alpha Neg Log Score"] = np.exp(
+                tmp_df["Neg Log Score"].values[0]
+            ) * np.power(
+                tmp_df["Scaling Parameter"],
+                -distributional_fit_df["alpha"].values[row_idx],
+            )
+
+            import matplotlib.pyplot as plt
+            import seaborn as sns
+
+            plt.close()
+            g = sns.lineplot(
+                tmp_df,
+                x="Scaling Parameter",
+                y="Neg Log Score",
+            )
+            g = sns.lineplot(
+                tmp_df,
+                x="Scaling Parameter",
+                y="alpha Neg Log Score",
+            )
+            g.set(xscale="log", yscale="log")
+            plt.show()
 
             # Fit a power law to the integral values.
             (
@@ -1662,64 +1672,81 @@ def estimate_pass_at_k(
 
 def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
     num_samples_and_num_successes_df: pd.DataFrame,
-    maxiter: int = 100,
+    maxiter: int = 25,
     epsilon: float = 1e-8,
 ) -> pd.Series:
     num_data = len(num_samples_and_num_successes_df)
     num_samples = num_samples_and_num_successes_df["Num. Samples Total"].values
     num_successes = num_samples_and_num_successes_df["Num. Samples Correct"].values
     fraction_successes = np.divide(num_successes, num_samples)
-    largest_fraction_successes = np.max(fraction_successes)
-    # Take reasonable initial parameters.
-    alpha, beta, _, c = scipy.stats.beta.fit(
-        fraction_successes[fraction_successes > 0],
-        floc=0.0,
-        fscale=largest_fraction_successes + epsilon,
-    )
+    # Add epsilon to ensure every datum is supported.
+    largest_fraction_successes = np.max(fraction_successes) + epsilon
+    # Start with reasonable initial parameters.
+    try:
+        alpha, beta, _, _ = scipy.stats.beta.fit(
+            fraction_successes + epsilon,
+            floc=0.0,
+            fscale=largest_fraction_successes + epsilon,
+        )
+    except Exception as e:
+        # Reasonable defaults.
+        alpha = 0.5
+        beta = 3.0
+
     # Inflate to correct for bias; is this correct?
     # I think we actually want to divide by the expected value of the maximum of
     # n i.i.d. Beta(alpha, beta) random variables. But this doesn't appear to exist
     # in close form or even numerically?
     # TODO(rylan): Investigate this further.
-    smallest_scale = (num_data + 1.0) * largest_fraction_successes / num_data
-    initial_params = (alpha, beta, smallest_scale + epsilon)
+    scale = (num_data + 1.0) * largest_fraction_successes / num_data
+    initial_params = (alpha, beta)
     bounds = [
         (0.01, 100),
         (0.01, 100),
-        (smallest_scale, 1.0),
     ]
 
     # Fit alpha, beta, scale to the scaled beta binomial
-    optimize_result = scipy.optimize.minimize(
-        lambda params: compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
-            params,
-            num_samples=num_samples,
-            num_successes=num_successes,
-        ),
-        x0=initial_params,
-        bounds=bounds,
-        method="L-BFGS-B",
-        options=dict(
-            maxiter=maxiter,
-            maxls=100,
-            gtol=1e-6,  # Gradient tolerance, adjust as needed),
-        ),
-    )
+    try:
+        optimize_result = scipy.optimize.minimize(
+            lambda params: compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
+                params,
+                scale=scale,
+                num_samples=num_samples,
+                num_successes=num_successes,
+            ),
+            x0=initial_params,
+            bounds=bounds,
+            method="L-BFGS-B",
+            options=dict(
+                maxiter=maxiter,
+                maxls=200,
+                gtol=1e-4,  # Gradient tolerance, adjust as needed),
+                ftol=1e-4,
+            ),
+        )
+        alpha = optimize_result.x[0]
+        beta = optimize_result.x[1]
+        neg_log_likelihood = optimize_result.fun
+    except Exception as e:
+        # TODO(rylan): Debug scipy.stats._continuous_distns.FitSolverError: Solver for the MLE equations failed to converge: The iteration is not making good progress, as measured by the   improvement from the last ten iterations.
+        alpha = np.nan
+        beta = np.nan
+        neg_log_likelihood = np.nan
 
     result = pd.Series(
         {
-            "alpha": optimize_result.x[0],
-            "beta": optimize_result.x[1],
+            "alpha": alpha,
+            "beta": beta,
             "loc": 0.0,
-            "scale": optimize_result.x[2],
-            "neg_log_likelihood": optimize_result.fun,
-            "aic": 2 * len(initial_params) + 2 * optimize_result.fun,
-            "bic": len(initial_params) * np.log(len(num_samples_and_num_successes_df))
-            + 2 * optimize_result.fun,
+            "scale": scale,
+            "neg_log_likelihood": neg_log_likelihood,
+            # "aic": 2 * len(initial_params) + 2 * optimize_result.fun,
+            # "bic": len(initial_params) * np.log(len(num_samples_and_num_successes_df))
+            # + 2 * optimize_result.fun,
             "maxiter": maxiter,
         }
     )
-
+    print(result)
     return result
 
 
