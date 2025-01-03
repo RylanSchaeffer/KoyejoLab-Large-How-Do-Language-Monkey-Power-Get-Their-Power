@@ -1,10 +1,7 @@
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from datasets import load_dataset
-import flint
 import itertools
+import joblib
 import mpmath
-from math import comb
-from scipy.special import betaln
 import numpy as np
 import os
 import pandas as pd
@@ -17,7 +14,6 @@ import src.globals
 
 # Increase precision.
 mpmath.mp.prec = 1000
-flint.ctx.prec = 1000
 
 # This helps print more columns.
 pd.set_option("display.width", 1000)
@@ -144,7 +140,9 @@ def compute_beta_three_parameter_distribution_integral(
 
     # Parameter validation
     if not (0 < scale < 1 and alpha > 0 and beta > 0):
-        raise ValueError("Invalid parameters")
+        raise ValueError(
+            f"Invalid parameters: alpha: {alpha}, beta: {beta}, scale: {scale}"
+        )
 
     try:
         # Precompute constant factors (to avoid repeating in integrand)
@@ -156,7 +154,10 @@ def compute_beta_three_parameter_distribution_integral(
             ) / denom
 
         integral = mpmath.quad(integrand, [0, scale])
-        assert integral < 1.0
+        if integral < 0.0 or integral >= 1.0:
+            raise ValueError(
+                f"Integral invalid! Integral: {integral}, k: {k}, alpha: {alpha}, beta: {beta}, scale: {scale}"
+            )
         return float(integral)
     except (ValueError, TypeError, mpmath.libmp.NoConvergence):
         return float("nan")
@@ -268,13 +269,34 @@ def compute_pass_at_k_from_individual_outcomes(
     ks_list: List[int],
 ) -> pd.DataFrame:
     num_problems, num_samples_per_problem = individual_outcomes_per_problem.shape
-    pass_at_k_dfs_list = []
     num_samples_total = np.full(num_problems, fill_value=num_samples_per_problem)
     num_samples_correct = individual_outcomes_per_problem.sum(axis=1)
+    num_samples_and_num_successes_df = pd.DataFrame.from_dict(
+        {
+            "Num. Samples Total": num_samples_total,
+            "Num. Samples Correct": num_samples_correct,
+        }
+    )
+    pass_at_k_df = compute_pass_at_k_from_num_samples_and_num_successes_df(
+        num_samples_and_num_successes_df=num_samples_and_num_successes_df,
+        ks_list=ks_list,
+    )
+    return pass_at_k_df
+
+
+def compute_pass_at_k_from_num_samples_and_num_successes_df(
+    num_samples_and_num_successes_df: pd.DataFrame,
+    ks_list: List[int],
+):
+    num_samples = num_samples_and_num_successes_df["Num. Samples Total"].values
+    num_successes = num_samples_and_num_successes_df["Num. Samples Correct"].values
+    assert np.all(num_successes <= num_samples)
+    num_problems = len(num_samples_and_num_successes_df)
+    pass_at_k_dfs_list = []
     for k in ks_list:
         pass_at_k = src.analyze.estimate_pass_at_k(
-            num_samples_total=num_samples_total,
-            num_samples_correct=num_samples_correct,
+            num_samples_total=num_samples,
+            num_samples_correct=num_successes,
             k=k,
         )
         pass_at_k_df = pd.DataFrame(
@@ -318,9 +340,6 @@ def compute_scaling_exponent_from_distributional_fit(
                     beta=distributional_fit_df["beta"].values[row_idx],
                     scale=distributional_fit_df["scale"].values[row_idx],
                 )
-
-            assert np.all(0.0 <= integral_values)
-            assert np.all(integral_values <= 1.0)
 
             tmp_df = pd.DataFrame.from_dict(
                 {
@@ -379,7 +398,7 @@ def compute_scaling_exponent_from_distributional_fit(
     return distributional_fit_df
 
 
-def convert_individual_outcomes_to_num_samples_and_num_successes(
+def convert_individual_outcomes_to_num_samples_and_num_successes_df(
     individual_outcomes_df: pd.DataFrame,
     groupby_cols: List[str],
 ) -> pd.DataFrame:
@@ -472,12 +491,13 @@ def create_or_load_bon_jailbreaking_beta_binomial_mle_df(
         print(f"Creating {bon_jailbreaking_beta_binomial_mle_df_path} anew...")
         bon_jailbreaking_groupby_cols = ["Model", "Modality"]
 
-        bon_jailbreaking_individual_outcomes_df = src.analyze.create_or_load_bon_jailbreaking_individual_outcomes_df(
+        raise NotImplementedError("Update this function to handle multiple modalities.")
+        bon_jailbreaking_individual_outcomes_df = src.analyze.create_or_load_bon_jailbreaking_text_individual_outcomes_df(
             refresh=False,
             # refresh=True,
         )
         bon_jailbreaking_num_samples_and_num_successes_df = (
-            src.analyze.convert_individual_outcomes_to_num_samples_and_num_successes(
+            src.analyze.convert_individual_outcomes_to_num_samples_and_num_successes_df(
                 individual_outcomes_df=bon_jailbreaking_individual_outcomes_df,
                 groupby_cols=bon_jailbreaking_groupby_cols + ["Problem Idx"],
             )
@@ -520,13 +540,13 @@ def create_or_load_bon_jailbreaking_beta_binomial_mle_df(
     return bon_jailbreaking_beta_binomial_mle_df
 
 
-def create_or_load_bon_jailbreaking_individual_outcomes_df(
+def create_or_load_bon_jailbreaking_audio_individual_outcomes_df(
     raw_data_dir=f"{os.getcwd()}/data/raw_data",
     processed_data_dir=f"{os.getcwd()}/data/processed_data",
     refresh: bool = False,
 ) -> pd.DataFrame:
     bon_jailbreaking_individual_outcomes_df_path = os.path.join(
-        processed_data_dir, "bon_jailbreaking_individual_outcomes.parquet"
+        processed_data_dir, "bon_jailbreaking_audio_individual_outcomes.parquet"
     )
 
     if refresh or not os.path.exists(bon_jailbreaking_individual_outcomes_df_path):
@@ -536,19 +556,18 @@ def create_or_load_bon_jailbreaking_individual_outcomes_df(
         bon_jailbreaking_dir = os.path.join(raw_data_dir, "best_of_n_jailbreaking")
         best_of_n_jailbreaking_dfs_list = []
         jsonl_filenames = [
-            "claude-3-5-sonnet-20240620_text_t1.0_n10000.jsonl",
-            "claude-3-opus-20240229_text_t1.0_n10000.jsonl",
-            "gemini-1.5-flash-001_text_t1.0_n10000.jsonl",
-            "gemini-1.5-pro-001_text_t1.0_n10000.jsonl",
-            "gpt-4o-mini_text_t1.0_n10000.jsonl",
-            "gpt-4o_text_t1.0_n10000.jsonl",
-            "meta-llama-Meta-Llama-3-8B-Instruct_text_t1.0_n10000.jsonl",
+            "DiVA_augs6_sigma0.25_audio_t1.0_n7200.jsonl",
+            "gemini-1.5-flash-001_augs6_sigma0.25_audio_t1.0_n7200.jsonl",
+            "gemini-1.5-pro-001_augs6_sigma0.25_audio_t1.0_n7200.jsonl",
+            "gpt-4o-s2s_augs6_sigma0.25_audio_t1.0_n7200.jsonl",
         ]
         for jsonl_filename in jsonl_filenames:
             # for jsonl_filename in os.listdir(bon_jailbreaking_dir):
-            if "text" not in jsonl_filename:
+            if "audio" not in jsonl_filename:
                 continue
-            model_name, modality, temperature, num_samples = jsonl_filename.split("_")
+            model_name, _, _, modality, temperature, num_samples = jsonl_filename.split(
+                "_"
+            )
             # Strip off the leading "t" and convert to a float.
             temperature = float(temperature[1:])
             df = pd.read_json(
@@ -562,6 +581,8 @@ def create_or_load_bon_jailbreaking_individual_outcomes_df(
                 },
                 inplace=True,
             )
+            # Convert Score from bool to float.
+            df["Score"] = df["Score"].astype(float)
             df["Model"] = src.globals.BON_JAILBREAKING_MODELS_TO_NICE_STRINGS[
                 model_name
             ]
@@ -598,77 +619,374 @@ def create_or_load_bon_jailbreaking_individual_outcomes_df(
     return bon_jailbreaking_individual_outcomes_df
 
 
-def create_or_load_bon_jailbreaking_pass_at_k_df(
+def create_or_load_bon_jailbreaking_text_individual_outcomes_df(
     raw_data_dir=f"{os.getcwd()}/data/raw_data",
     processed_data_dir=f"{os.getcwd()}/data/processed_data",
     refresh: bool = False,
 ) -> pd.DataFrame:
-    bon_jailbreaking_pass_at_k_df_path = os.path.join(
-        processed_data_dir, "bon_jailbreaking_pass_at_k.parquet"
+    bon_jailbreaking_individual_outcomes_df_path = os.path.join(
+        processed_data_dir, "bon_jailbreaking_text_individual_outcomes.parquet"
     )
 
-    if refresh or not os.path.exists(bon_jailbreaking_pass_at_k_df_path):
-        print(f"Creating {bon_jailbreaking_pass_at_k_df_path} anew...")
-        bon_jailbreaking_individual_outcomes_df = (
-            create_or_load_bon_jailbreaking_individual_outcomes_df(
+    if refresh or not os.path.exists(bon_jailbreaking_individual_outcomes_df_path):
+        print(f"Creating {bon_jailbreaking_individual_outcomes_df_path} anew...")
+
+        os.makedirs(processed_data_dir, exist_ok=True)
+        bon_jailbreaking_dir = os.path.join(raw_data_dir, "best_of_n_jailbreaking")
+        best_of_n_jailbreaking_dfs_list = []
+        jsonl_filenames = [
+            "claude-3-5-sonnet-20240620_text_t1.0_n10000.jsonl",
+            "claude-3-opus-20240229_text_t1.0_n10000.jsonl",
+            "gemini-1.5-flash-001_text_t1.0_n10000.jsonl",
+            "gemini-1.5-pro-001_text_t1.0_n10000.jsonl",
+            "gpt-4o-mini_text_t1.0_n10000.jsonl",
+            "gpt-4o_text_t1.0_n10000.jsonl",
+            "meta-llama-Meta-Llama-3-8B-Instruct_text_t1.0_n10000.jsonl",
+        ]
+        for jsonl_filename in jsonl_filenames:
+            # for jsonl_filename in os.listdir(bon_jailbreaking_dir):
+            if "text" not in jsonl_filename:
+                continue
+            model_name, modality, temperature, num_samples = jsonl_filename.split("_")
+            # Strip off the leading "t" and convert to a float.
+            temperature = float(temperature[1:])
+            df = pd.read_json(
+                os.path.join(bon_jailbreaking_dir, jsonl_filename), lines=True
+            )
+            df.rename(
+                columns={
+                    "i": "Problem Idx",
+                    "n": "Attempt Idx",
+                    "flagged": "Score",
+                },
+                inplace=True,
+            )
+            # Convert Score from bool to float.
+            df["Score"] = df["Score"].astype(float)
+            df["Model"] = src.globals.BON_JAILBREAKING_MODELS_TO_NICE_STRINGS[
+                model_name
+            ]
+            df["Modality"] = src.globals.BON_JAILBREAKING_MODALITY_TO_NICE_STRINGS[
+                modality
+            ]
+            df["Temperature"] = temperature
+            best_of_n_jailbreaking_dfs_list.append(df)
+
+        best_of_n_jailbreaking_individual_outcomes_df = pd.concat(
+            best_of_n_jailbreaking_dfs_list
+        )
+        best_of_n_jailbreaking_individual_outcomes_df = (
+            best_of_n_jailbreaking_individual_outcomes_df[
+                best_of_n_jailbreaking_individual_outcomes_df["Temperature"] == 1.0
+            ]
+        )
+
+        best_of_n_jailbreaking_individual_outcomes_df.to_parquet(
+            bon_jailbreaking_individual_outcomes_df_path,
+            index=False,
+        )
+        print(f"Wrote {bon_jailbreaking_individual_outcomes_df_path} to disk.")
+        del best_of_n_jailbreaking_individual_outcomes_df
+
+    bon_jailbreaking_individual_outcomes_df = pd.read_parquet(
+        bon_jailbreaking_individual_outcomes_df_path
+    )
+    print(
+        f"Loaded {bon_jailbreaking_individual_outcomes_df_path} with shape: ",
+        bon_jailbreaking_individual_outcomes_df.shape,
+    )
+
+    return bon_jailbreaking_individual_outcomes_df
+
+
+def create_or_load_bon_jailbreaking_vision_individual_outcomes_df(
+    raw_data_dir=f"{os.getcwd()}/data/raw_data",
+    processed_data_dir=f"{os.getcwd()}/data/processed_data",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    bon_jailbreaking_vision_individual_outcomes_df_path = os.path.join(
+        processed_data_dir, "bon_jailbreaking_vision_individual_outcomes.parquet"
+    )
+
+    if refresh or not os.path.exists(
+        bon_jailbreaking_vision_individual_outcomes_df_path
+    ):
+        print(f"Creating {bon_jailbreaking_vision_individual_outcomes_df_path} anew...")
+
+        os.makedirs(processed_data_dir, exist_ok=True)
+        bon_jailbreaking_dir = os.path.join(raw_data_dir, "best_of_n_jailbreaking")
+        best_of_n_jailbreaking_dfs_list = []
+        jsonl_filenames = [
+            "claude-3-5-sonnet-20240620_vision_t1.0_n7200.jsonl",
+            "claude-3-opus-20240229_vision_t1.0_n7200.jsonl",
+            "gemini-1.5-flash-001_vision_t1.0_n7200.jsonl",
+            "gemini-1.5-pro-001_vision_t1.0_n7200.jsonl",
+            "gpt-4o-mini_vision_t1.0_n7200.jsonl",
+            "gpt-4o_vision_t1.0_n7200.jsonl",
+        ]
+        for jsonl_filename in jsonl_filenames:
+            # for jsonl_filename in os.listdir(bon_jailbreaking_dir):
+            if "vision" not in jsonl_filename:
+                continue
+            model_name, modality, temperature, num_samples = jsonl_filename.split("_")
+            # Strip off the leading "t" and convert to a float.
+            temperature = float(temperature[1:])
+            df = pd.read_json(
+                os.path.join(bon_jailbreaking_dir, jsonl_filename), lines=True
+            )
+            df.rename(
+                columns={
+                    "i": "Problem Idx",
+                    "n": "Attempt Idx",
+                    "flagged": "Score",
+                },
+                inplace=True,
+            )
+            df["Model"] = src.globals.BON_JAILBREAKING_MODELS_TO_NICE_STRINGS[
+                model_name
+            ]
+            df["Modality"] = src.globals.BON_JAILBREAKING_MODALITY_TO_NICE_STRINGS[
+                modality
+            ]
+            df["Temperature"] = temperature
+            best_of_n_jailbreaking_dfs_list.append(df)
+
+        best_of_n_jailbreaking_individual_outcomes_df = pd.concat(
+            best_of_n_jailbreaking_dfs_list
+        )
+        best_of_n_jailbreaking_individual_outcomes_df = (
+            best_of_n_jailbreaking_individual_outcomes_df[
+                best_of_n_jailbreaking_individual_outcomes_df["Temperature"] == 1.0
+            ]
+        )
+
+        best_of_n_jailbreaking_individual_outcomes_df.to_parquet(
+            bon_jailbreaking_vision_individual_outcomes_df_path,
+            index=False,
+        )
+        print(f"Wrote {bon_jailbreaking_vision_individual_outcomes_df_path} to disk.")
+        del best_of_n_jailbreaking_individual_outcomes_df
+
+    bon_jailbreaking_individual_outcomes_df = pd.read_parquet(
+        bon_jailbreaking_vision_individual_outcomes_df_path
+    )
+    print(
+        f"Loaded {bon_jailbreaking_vision_individual_outcomes_df_path} with shape: ",
+        bon_jailbreaking_individual_outcomes_df.shape,
+    )
+
+    return bon_jailbreaking_individual_outcomes_df
+
+
+def create_or_load_bon_jailbreaking_audio_pass_at_k_df(
+    raw_data_dir=f"{os.getcwd()}/data/raw_data",
+    processed_data_dir=f"{os.getcwd()}/data/processed_data",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    bon_jailbreaking_audio_pass_at_k_df_path = os.path.join(
+        processed_data_dir, "bon_jailbreaking_audio_pass_at_k.parquet"
+    )
+
+    if refresh or not os.path.exists(bon_jailbreaking_audio_pass_at_k_df_path):
+        print(f"Creating {bon_jailbreaking_audio_pass_at_k_df_path} anew...")
+        bon_jailbreaking_audio_individual_outcomes_df = (
+            create_or_load_bon_jailbreaking_audio_individual_outcomes_df(
                 raw_data_dir=raw_data_dir,
                 processed_data_dir=processed_data_dir,
                 refresh=refresh,
             )
         )
 
-        bon_jailbreaking_pass_at_k_df = (
-            bon_jailbreaking_individual_outcomes_df.groupby(
-                ["Model", "Modality", "Temperature", "Problem Idx"]
+        bon_jailbreaking_audio_num_samples_and_num_successes_df = (
+            convert_individual_outcomes_to_num_samples_and_num_successes_df(
+                individual_outcomes_df=bon_jailbreaking_audio_individual_outcomes_df,
+                groupby_cols=["Model", "Modality", "Temperature", "Problem Idx"],
             )
-            .agg(
-                {
-                    "Score": ["size", "sum"],
-                }
+        )
+
+        pass_at_ks_df_list = []
+        for (
+            model,
+            modality,
+            temp,
+        ), subset_num_samples_and_num_successes_df in bon_jailbreaking_audio_num_samples_and_num_successes_df.groupby(
+            ["Model", "Modality", "Temperature"]
+        ):
+            pass_at_k_df = compute_pass_at_k_from_num_samples_and_num_successes_df(
+                num_samples_and_num_successes_df=subset_num_samples_and_num_successes_df,
+                ks_list=src.globals.BON_JAILBREAKING_AUDIO_Ks_LIST,
             )
-            .reset_index()
-        )
+            pass_at_k_df["Model"] = model
+            pass_at_k_df["Modality"] = modality
+            pass_at_k_df["Temperature"] = temp
+            pass_at_ks_df_list.append(pass_at_k_df)
 
-        bon_jailbreaking_pass_at_k_df.columns = [
-            "".join(col).strip() if isinstance(col, tuple) else col
-            for col in bon_jailbreaking_pass_at_k_df.columns
-        ]
-        bon_jailbreaking_pass_at_k_df.rename(
-            columns={
-                "Scoresize": "Num. Samples Total",
-                "Scoresum": "Num. Samples Correct",
-            },
-            inplace=True,
+        bon_jailbreaking_audio_pass_at_k_df = pd.concat(
+            pass_at_ks_df_list, ignore_index=True
         )
-
-        bon_jailbreaking_pass_at_k_df = compute_pass_at_k_from_individual_outcomes(
-            bon_jailbreaking_pass_at_k_df,
-            ks_list=src.globals.BON_JAILBREAKING_Ks_LIST,
+        bon_jailbreaking_audio_pass_at_k_df["Log Score"] = np.log(
+            bon_jailbreaking_audio_pass_at_k_df["Score"]
         )
-        bon_jailbreaking_pass_at_k_df.pivot(
-            id_vars=["Model", "Modality", "Temperature"],
-        )
-
-        bon_jailbreaking_pass_at_k_df["Log Score"] = np.log(
-            bon_jailbreaking_pass_at_k_df["Score"]
-        )
-        bon_jailbreaking_pass_at_k_df["Neg Log Score"] = -bon_jailbreaking_pass_at_k_df[
-            "Log Score"
-        ]
-        bon_jailbreaking_pass_at_k_df.to_parquet(
-            bon_jailbreaking_pass_at_k_df_path,
+        bon_jailbreaking_audio_pass_at_k_df[
+            "Neg Log Score"
+        ] = -bon_jailbreaking_audio_pass_at_k_df["Log Score"]
+        bon_jailbreaking_audio_pass_at_k_df.to_parquet(
+            bon_jailbreaking_audio_pass_at_k_df_path,
             index=False,
         )
 
-        print(f"Wrote {bon_jailbreaking_pass_at_k_df_path} to disk.")
-        del bon_jailbreaking_pass_at_k_df
+        print(f"Wrote {bon_jailbreaking_audio_pass_at_k_df_path} to disk.")
+        del bon_jailbreaking_audio_pass_at_k_df
 
-    models_gsm8k_pass_at_k_df = pd.read_parquet(bon_jailbreaking_pass_at_k_df_path)
-    print(
-        f"Loaded {bon_jailbreaking_pass_at_k_df_path} with shape: ",
-        models_gsm8k_pass_at_k_df.shape,
+    bon_jailbreaking_audio_pass_at_k_df = pd.read_parquet(
+        bon_jailbreaking_audio_pass_at_k_df_path
     )
-    return models_gsm8k_pass_at_k_df
+    print(
+        f"Loaded {bon_jailbreaking_audio_pass_at_k_df_path} with shape: ",
+        bon_jailbreaking_audio_pass_at_k_df.shape,
+    )
+    return bon_jailbreaking_audio_pass_at_k_df
+
+
+def create_or_load_bon_jailbreaking_text_pass_at_k_df(
+    raw_data_dir=f"{os.getcwd()}/data/raw_data",
+    processed_data_dir=f"{os.getcwd()}/data/processed_data",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    bon_jailbreaking_text_pass_at_k_df_path = os.path.join(
+        processed_data_dir, "bon_jailbreaking_text_pass_at_k.parquet"
+    )
+
+    if refresh or not os.path.exists(bon_jailbreaking_text_pass_at_k_df_path):
+        print(f"Creating {bon_jailbreaking_text_pass_at_k_df_path} anew...")
+        bon_jailbreaking_text_individual_outcomes_df = (
+            create_or_load_bon_jailbreaking_text_individual_outcomes_df(
+                raw_data_dir=raw_data_dir,
+                processed_data_dir=processed_data_dir,
+                refresh=refresh,
+            )
+        )
+
+        bon_jailbreaking_text_num_samples_and_num_successes_df = (
+            convert_individual_outcomes_to_num_samples_and_num_successes_df(
+                individual_outcomes_df=bon_jailbreaking_text_individual_outcomes_df,
+                groupby_cols=["Model", "Modality", "Temperature", "Problem Idx"],
+            )
+        )
+
+        pass_at_ks_df_list = []
+        for (
+            model,
+            modality,
+            temp,
+        ), subset_num_samples_and_num_successes_df in bon_jailbreaking_text_num_samples_and_num_successes_df.groupby(
+            ["Model", "Modality", "Temperature"]
+        ):
+            pass_at_k_df = compute_pass_at_k_from_num_samples_and_num_successes_df(
+                num_samples_and_num_successes_df=subset_num_samples_and_num_successes_df,
+                ks_list=src.globals.BON_JAILBREAKING_TEXT_Ks_LIST,
+            )
+            pass_at_k_df["Model"] = model
+            pass_at_k_df["Modality"] = modality
+            pass_at_k_df["Temperature"] = temp
+            pass_at_ks_df_list.append(pass_at_k_df)
+
+        bon_jailbreaking_text_pass_at_k_df = pd.concat(
+            pass_at_ks_df_list, ignore_index=True
+        )
+        bon_jailbreaking_text_pass_at_k_df["Log Score"] = np.log(
+            bon_jailbreaking_text_pass_at_k_df["Score"]
+        )
+        bon_jailbreaking_text_pass_at_k_df[
+            "Neg Log Score"
+        ] = -bon_jailbreaking_text_pass_at_k_df["Log Score"]
+        bon_jailbreaking_text_pass_at_k_df.to_parquet(
+            bon_jailbreaking_text_pass_at_k_df_path,
+            index=False,
+        )
+
+        print(f"Wrote {bon_jailbreaking_text_pass_at_k_df_path} to disk.")
+        del bon_jailbreaking_text_pass_at_k_df
+
+    bon_jailbreaking_text_pass_at_k_df = pd.read_parquet(
+        bon_jailbreaking_text_pass_at_k_df_path
+    )
+    print(
+        f"Loaded {bon_jailbreaking_text_pass_at_k_df_path} with shape: ",
+        bon_jailbreaking_text_pass_at_k_df.shape,
+    )
+    return bon_jailbreaking_text_pass_at_k_df
+
+
+def create_or_load_bon_jailbreaking_vision_pass_at_k_df(
+    raw_data_dir=f"{os.getcwd()}/data/raw_data",
+    processed_data_dir=f"{os.getcwd()}/data/processed_data",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    bon_jailbreaking_vision_pass_at_k_df_path = os.path.join(
+        processed_data_dir, "bon_jailbreaking_vision_pass_at_k.parquet"
+    )
+
+    if refresh or not os.path.exists(bon_jailbreaking_vision_pass_at_k_df_path):
+        print(f"Creating {bon_jailbreaking_vision_pass_at_k_df_path} anew...")
+        bon_jailbreaking_vision_individual_outcomes_df = (
+            create_or_load_bon_jailbreaking_vision_individual_outcomes_df(
+                raw_data_dir=raw_data_dir,
+                processed_data_dir=processed_data_dir,
+                refresh=refresh,
+            )
+        )
+
+        bon_jailbreaking_vision_num_samples_and_num_successes_df = (
+            convert_individual_outcomes_to_num_samples_and_num_successes_df(
+                individual_outcomes_df=bon_jailbreaking_vision_individual_outcomes_df,
+                groupby_cols=["Model", "Modality", "Temperature", "Problem Idx"],
+            )
+        )
+
+        pass_at_ks_df_list = []
+        for (
+            model,
+            modality,
+            temp,
+        ), subset_num_samples_and_num_successes_df in bon_jailbreaking_vision_num_samples_and_num_successes_df.groupby(
+            ["Model", "Modality", "Temperature"]
+        ):
+            pass_at_k_df = compute_pass_at_k_from_num_samples_and_num_successes_df(
+                num_samples_and_num_successes_df=subset_num_samples_and_num_successes_df,
+                ks_list=src.globals.BON_JAILBREAKING_VISION_Ks_LIST,
+            )
+            pass_at_k_df["Model"] = model
+            pass_at_k_df["Modality"] = modality
+            pass_at_k_df["Temperature"] = temp
+            pass_at_ks_df_list.append(pass_at_k_df)
+
+        bon_jailbreaking_vision_pass_at_k_df = pd.concat(
+            pass_at_ks_df_list, ignore_index=True
+        )
+
+        bon_jailbreaking_vision_pass_at_k_df["Log Score"] = np.log(
+            bon_jailbreaking_vision_pass_at_k_df["Score"]
+        )
+        bon_jailbreaking_vision_pass_at_k_df[
+            "Neg Log Score"
+        ] = -bon_jailbreaking_vision_pass_at_k_df["Log Score"]
+        bon_jailbreaking_vision_pass_at_k_df.to_parquet(
+            bon_jailbreaking_vision_pass_at_k_df_path,
+            index=False,
+        )
+
+        print(f"Wrote {bon_jailbreaking_vision_pass_at_k_df_path} to disk.")
+        del bon_jailbreaking_vision_pass_at_k_df
+
+    bon_jailbreaking_vision_pass_at_k_df = pd.read_parquet(
+        bon_jailbreaking_vision_pass_at_k_df_path
+    )
+    print(
+        f"Loaded {bon_jailbreaking_vision_pass_at_k_df_path} with shape: ",
+        bon_jailbreaking_vision_pass_at_k_df.shape,
+    )
+    return bon_jailbreaking_vision_pass_at_k_df
 
 
 def create_or_load_cross_validated_bon_jailbreaking_scaling_coefficient_data_df(
@@ -691,8 +1009,8 @@ def create_or_load_cross_validated_bon_jailbreaking_scaling_coefficient_data_df(
         # 3. Fit the distributional parameters to the synthetic data.
         # 4. Compute the scaling exponent from the distributional fits.
 
-        individual_outcomes_df = create_or_load_bon_jailbreaking_individual_outcomes_df(
-            refresh=False
+        individual_outcomes_df = (
+            create_or_load_bon_jailbreaking_text_individual_outcomes_df(refresh=False)
         )
         individual_outcomes_per_problem = individual_outcomes_df.values
 
@@ -865,22 +1183,30 @@ def create_or_load_cross_validated_large_language_monkey_pythia_math_scaling_coe
             )
         )
 
-        dfs_list = []
-        for (
-            model,
-            benchmark,
-        ), subset_individual_outcomes_per_problem_df in individual_outcomes_per_problem_df.groupby(
-            src.globals.LARGE_LANGUAGE_MONKEYS_GROUPBY_COLS
+        def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_wrapper(
+            model: str, benchmark: str, subset_df: pd.DataFrame
         ):
-            cv_power_law_coefficient_estimation_df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
-                individual_outcomes_per_problem_df=subset_individual_outcomes_per_problem_df,
+            result_df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
+                individual_outcomes_per_problem_df=subset_df,
             )
-            cv_power_law_coefficient_estimation_df["Model"] = model
-            cv_power_law_coefficient_estimation_df["Benchmark"] = benchmark
-            dfs_list.append(cv_power_law_coefficient_estimation_df)
+            result_df["Model"] = model
+            result_df["Benchmark"] = benchmark
+            return result_df
+
+        dfs_list = joblib.Parallel(n_jobs=10)(
+            joblib.delayed(
+                cross_validate_power_law_coefficient_estimators_from_individual_outcomes_wrapper
+            )(model, benchmark, subset_df)
+            for (
+                model,
+                benchmark,
+            ), subset_df in individual_outcomes_per_problem_df.groupby(
+                src.globals.LARGE_LANGUAGE_MONKEYS_GROUPBY_COLS
+            )
+        )
 
         cv_large_language_monkeys_pythia_math_scaling_coefficient_df = pd.concat(
-            dfs_list
+            dfs_list, ignore_index=True
         )
 
         cv_large_language_monkeys_pythia_math_scaling_coefficient_df.to_parquet(
@@ -1313,7 +1639,7 @@ def create_or_load_large_language_monkeys_pythia_math_beta_binomial_mle_df(
             # refresh=True,
         )
         llmonkeys_num_samples_and_num_successes_df = (
-            src.analyze.convert_individual_outcomes_to_num_samples_and_num_successes(
+            src.analyze.convert_individual_outcomes_to_num_samples_and_num_successes_df(
                 individual_outcomes_df=llmonkeys_individual_outcomes_df,
                 groupby_cols=llmonkeys_groupby_cols + ["Problem Idx"],
             )
@@ -1867,9 +2193,9 @@ def create_or_load_pretraining_probability_df(
 
 def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
     individual_outcomes_per_problem_df: pd.DataFrame,
+    num_repeats: int = 2,
     num_problems_list: Optional[List[int]] = None,
     num_samples_per_problem_list: Optional[List[int]] = None,
-    num_repeats: int = 10,
 ) -> pd.DataFrame:
     unique_problem_indices = individual_outcomes_per_problem_df["Problem Idx"].unique()
     unique_attempt_indices = individual_outcomes_per_problem_df["Attempt Idx"].unique()
@@ -1878,16 +2204,16 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
         num_problems_list = [
             64,
             96,
-            128,
+            # 128,
         ]
         assert len(unique_problem_indices) <= 128
     if num_samples_per_problem_list is None:
         num_samples_per_problem_list = [
             100,
             316,
-            1000,
-            3162,
-            10000,
+            # 1000,
+            # 3162,
+            # 10000,
         ]
         assert len(unique_attempt_indices) <= 10000
 
@@ -1946,137 +2272,41 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
     del pass_at_k_df, avg_pass_at_k_df, least_sqrs_fitted_power_law_parameters_df
 
     # Step 2: Take subsets of problems and samples per problem and repeats.
-    scaling_exponents_dfs_list = []
-    for num_problems, num_samples_per_problem, repeat_idx in itertools.product(
+    all_combos = itertools.product(
         num_problems_list, num_samples_per_problem_list, range(num_repeats)
-    ):
-        problems_subset_indices = np.random.choice(
-            individual_outcomes_per_problem.shape[0],
-            size=num_problems,
-            replace=False,
-        ).astype(int)
-        samples_subset_indices = np.random.choice(
-            individual_outcomes_per_problem.shape[1],
-            size=num_samples_per_problem,
-            replace=False,
-        ).astype(int)
-        subset_individual_outcomes_per_problem = individual_outcomes_per_problem[
-            np.ix_(problems_subset_indices, samples_subset_indices)
-        ]
-
-        ks_list: List[int] = np.unique(
-            np.logspace(
-                0,
-                np.log10(num_samples_per_problem),
-                num_samples_per_problem // 10,
-            ).astype(int)
-        ).tolist()
-
-        subset_pass_at_k_df = src.analyze.compute_pass_at_k_from_individual_outcomes(
-            individual_outcomes_per_problem=subset_individual_outcomes_per_problem,
-            ks_list=ks_list,
+    )
+    scaling_exponents_dfs_list = joblib.Parallel(n_jobs=10)(
+        joblib.delayed(
+            cross_validate_power_law_coefficient_estimators_from_individual_outcomes_helper
+        )(
+            num_problems,
+            num_samples_per_problem,
+            repeat_idx,
+            individual_outcomes_per_problem,
+            individual_outcomes_per_problem_df,
+            unique_problem_indices,
+            unique_attempt_indices,
         )
-
-        # Method 1: Least-squares fit.
-        subset_avg_pass_at_k_df = (
-            subset_pass_at_k_df.groupby("Scaling Parameter")["Score"]
-            .mean()
-            .reset_index()
-        )
-        subset_avg_pass_at_k_df["Neg Log Score"] = -np.log(
-            subset_avg_pass_at_k_df["Score"]
-        )
-        subset_avg_pass_at_k_df["Placeholder"] = "Placeholder"
-        (
-            _,
-            subset_least_sqrs_fitted_power_law_parameters_df,
-        ) = src.analyze.fit_power_law(
-            df=subset_avg_pass_at_k_df,
-            covariate_col="Scaling Parameter",
-            target_col="Neg Log Score",
-            groupby_cols=["Placeholder"],
-        )
-
-        scaling_exponents_dfs_list.append(
-            pd.DataFrame(
-                {
-                    "Num. Problems": num_problems,
-                    r"Num. Samples per Problem ($n$)": [num_samples_per_problem],
-                    "Power Law Exponent": [
-                        subset_least_sqrs_fitted_power_law_parameters_df[
-                            "Power Law Exponent"
-                        ].values[0]
-                    ],
-                    "Fit Method": "Least Squares",
-                    "True Power Law Exponent": [true_power_law_exponent],
-                    "Repeat Index": [repeat_idx],
-                }
-            )
-        )
-
-        # Method 2: Distributional fit to pass_i@1.
-        subset_individual_outcomes_per_problem_df = individual_outcomes_per_problem_df[
-            (
-                individual_outcomes_per_problem_df["Problem Idx"].isin(
-                    unique_problem_indices[problems_subset_indices]
-                )
-            )
-            & (
-                individual_outcomes_per_problem_df["Attempt Idx"].isin(
-                    unique_attempt_indices[samples_subset_indices]
-                )
-            )
-        ]
-        subset_num_samples_and_num_successes_df = (
-            src.analyze.convert_individual_outcomes_to_num_samples_and_num_successes(
-                individual_outcomes_df=subset_individual_outcomes_per_problem_df,
-                groupby_cols=["Problem Idx"],
-            )
-        )
-
-        subset_beta_binomial_mle_df = pd.DataFrame(
-            src.analyze.fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
-                num_samples_and_num_successes_df=subset_num_samples_and_num_successes_df
-            )
-        ).T
-
-        # Add power law exponent numerically.
-        subset_beta_binomial_mle_df = (
-            src.analyze.compute_scaling_exponent_from_distributional_fit(
-                distributional_fit_df=subset_beta_binomial_mle_df,
-                distribution="beta_three_parameter",
-            )
-        )
-
-        scaling_exponents_dfs_list.append(
-            pd.DataFrame(
-                {
-                    "Num. Problems": num_problems,
-                    r"Num. Samples per Problem ($n$)": [num_samples_per_problem],
-                    "Power Law Exponent": [
-                        subset_beta_binomial_mle_df["Power Law Exponent"]
-                    ],
-                    "Fit Method": "Distribution",
-                    "True Power Law Exponent": [true_power_law_exponent],
-                    "Repeat Index": [repeat_idx],
-                }
-            )
-        )
+        for num_problems, num_samples_per_problem, repeat_idx in all_combos
+    )
 
     cross_validated_power_law_coefficient_estimators_df = pd.concat(
         scaling_exponents_dfs_list, ignore_index=True
     ).reset_index(drop=True)
     cross_validated_power_law_coefficient_estimators_df[
+        "True Power Law Exponent"
+    ] = true_power_law_exponent
+    cross_validated_power_law_coefficient_estimators_df[
         r"$(\beta - \hat{\beta})^2$"
     ] = 0.5 * np.square(
-        cross_validated_power_law_coefficient_estimators_df["Power Law Exponent"]
-        - cross_validated_power_law_coefficient_estimators_df[
-            "Theoretical Power Law Exponent"
-        ]
+        cross_validated_power_law_coefficient_estimators_df["Fit Power Law Exponent"]
+        - cross_validated_power_law_coefficient_estimators_df["True Power Law Exponent"]
     )
     cross_validated_power_law_coefficient_estimators_df["Relative Error"] = np.divide(
         np.abs(
-            cross_validated_power_law_coefficient_estimators_df["Power Law Exponent"]
+            cross_validated_power_law_coefficient_estimators_df[
+                "Fit Power Law Exponent"
+            ]
             - cross_validated_power_law_coefficient_estimators_df[
                 "True Power Law Exponent"
             ]
@@ -2084,6 +2314,122 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
         cross_validated_power_law_coefficient_estimators_df["True Power Law Exponent"],
     )
     return cross_validated_power_law_coefficient_estimators_df
+
+
+def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_helper(
+    num_problems: int,
+    num_samples_per_problem: int,
+    repeat_idx: int,
+    individual_outcomes_per_problem: np.ndarray,
+    individual_outcomes_per_problem_df: pd.DataFrame,
+    unique_problem_indices: np.ndarray,
+    unique_attempt_indices: np.ndarray,
+) -> pd.DataFrame:
+    problems_subset_indices = np.random.choice(
+        individual_outcomes_per_problem.shape[0],
+        size=num_problems,
+        replace=False,
+    ).astype(int)
+    samples_subset_indices = np.random.choice(
+        individual_outcomes_per_problem.shape[1],
+        size=num_samples_per_problem,
+        replace=False,
+    ).astype(int)
+    subset_individual_outcomes_per_problem = individual_outcomes_per_problem[
+        np.ix_(problems_subset_indices, samples_subset_indices)
+    ]
+
+    ks_list: List[int] = np.unique(
+        np.logspace(
+            0,
+            np.log10(num_samples_per_problem),
+            num_samples_per_problem // 10,
+        ).astype(int)
+    ).tolist()
+
+    subset_pass_at_k_df = src.analyze.compute_pass_at_k_from_individual_outcomes(
+        individual_outcomes_per_problem=subset_individual_outcomes_per_problem,
+        ks_list=ks_list,
+    )
+
+    # Method 1: Least-squares fit.
+    subset_avg_pass_at_k_df = (
+        subset_pass_at_k_df.groupby("Scaling Parameter")["Score"].mean().reset_index()
+    )
+    subset_avg_pass_at_k_df["Neg Log Score"] = -np.log(subset_avg_pass_at_k_df["Score"])
+    subset_avg_pass_at_k_df["Placeholder"] = "Placeholder"
+    (
+        _,
+        subset_least_sqrs_fitted_power_law_parameters_df,
+    ) = src.analyze.fit_power_law(
+        df=subset_avg_pass_at_k_df,
+        covariate_col="Scaling Parameter",
+        target_col="Neg Log Score",
+        groupby_cols=["Placeholder"],
+    )
+
+    df_lst_sqrs_fit = pd.DataFrame(
+        {
+            "Num. Problems": num_problems,
+            r"Num. Samples per Problem ($n$)": [num_samples_per_problem],
+            "Fit Power Law Exponent": [
+                subset_least_sqrs_fitted_power_law_parameters_df[
+                    "Power Law Exponent"
+                ].values[0]
+            ],
+            "Fit Method": "Least Squares",
+            "Repeat Index": [repeat_idx],
+        }
+    )
+
+    # Method 2: Distributional fit to pass_i@1.
+    subset_individual_outcomes_per_problem_df = individual_outcomes_per_problem_df[
+        (
+            individual_outcomes_per_problem_df["Problem Idx"].isin(
+                unique_problem_indices[problems_subset_indices]
+            )
+        )
+        & (
+            individual_outcomes_per_problem_df["Attempt Idx"].isin(
+                unique_attempt_indices[samples_subset_indices]
+            )
+        )
+    ]
+    subset_num_samples_and_num_successes_df = (
+        src.analyze.convert_individual_outcomes_to_num_samples_and_num_successes_df(
+            individual_outcomes_df=subset_individual_outcomes_per_problem_df,
+            groupby_cols=["Problem Idx"],
+        )
+    )
+
+    subset_beta_binomial_mle_df = pd.DataFrame(
+        src.analyze.fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
+            num_samples_and_num_successes_df=subset_num_samples_and_num_successes_df
+        )
+    ).T
+
+    # Add power law exponent numerically.
+    subset_beta_binomial_mle_df = (
+        src.analyze.compute_scaling_exponent_from_distributional_fit(
+            distributional_fit_df=subset_beta_binomial_mle_df,
+            distribution="beta_three_parameter",
+        )
+    )
+
+    df_beta_binomial_fit = pd.DataFrame(
+        {
+            "Num. Problems": num_problems,
+            "Num. Samples per Problem": [num_samples_per_problem],
+            "Fit Power Law Exponent": [
+                subset_beta_binomial_mle_df["Power Law Exponent"]
+            ],
+            "Fit Method": "Distribution",
+            "Repeat Index": [repeat_idx],
+        }
+    )
+
+    result_df = pd.concat([df_lst_sqrs_fit, df_beta_binomial_fit], ignore_index=True)
+    return result_df
 
 
 def estimate_pass_at_k(
@@ -2098,11 +2444,13 @@ def estimate_pass_at_k(
     def estimator(n: int, c: int, k: int) -> float:
         """
         Calculates 1 - comb(n - c, k) / comb(n, k).
+
+        The OpenAI function, as initially written, assumes $n >= k$.
+        Technically, the BoN sampling methodology violates this assumption. I'm not sure
+        what the fix should be.
         """
-        assert n >= c
-        if n < k:
-            return np.nan
-        elif (n - c) < k:
+        if (n - c) < k:
+            # Every subset of size $k$ will have at least 1 success.
             return 1.0
         return 1.0 - np.prod(1.0 - k / np.arange(n - c + 1, n + 1))
 
@@ -2121,7 +2469,7 @@ def estimate_pass_at_k(
 
 def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
     num_samples_and_num_successes_df: pd.DataFrame,
-    maxiter: int = 25,
+    maxiter: int = 10,
     epsilon: float = 1e-8,
 ) -> pd.Series:
     num_data = len(num_samples_and_num_successes_df)
@@ -2545,7 +2893,19 @@ def fit_power_law(
         y = group_df[target_col]
 
         # Exclude any np.inf or np.nan values
-        mask = np.isfinite(x) & np.isfinite(y)
+        which_x_finite = np.isfinite(x)
+        if np.all(~which_x_finite):
+            raise ValueError(f"No valid x to fit the power law model.\nx: {x}")
+        which_y_finite = np.isfinite(y)
+        if np.all(~which_y_finite):
+            raise ValueError(f"No valid y to fit the power law model.\ny: {y}")
+        mask = which_x_finite & which_y_finite
+        if np.all(~mask):
+            raise ValueError(
+                f"No valid data points to fit the power law model.\nFraction x finite: {which_x_finite.mean()}\nFraction y finite: {which_y_finite.mean()}"
+            )
+
+        # If we have remaining data, we can proceed.
         x = x[mask]
         y = y[mask]
 
@@ -2578,6 +2938,7 @@ def fit_power_law(
                 "Log Power Law Prefactor": result.x[0],
                 "Power Law Prefactor": np.exp(result.x[0]),
                 "Power Law Exponent": result.x[1],
+                "Status": "Success" if result.success else "Failure",
             }
         )
 

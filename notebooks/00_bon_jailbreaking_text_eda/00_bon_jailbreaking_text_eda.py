@@ -1,3 +1,5 @@
+import pprint
+
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 import numpy as np
@@ -17,7 +19,7 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
     refresh=False,
 )
 
-bon_jailbreaking_pass_at_k_df = src.analyze.create_or_load_bon_jailbreaking_pass_at_k_df(
+bon_jailbreaking_text_pass_at_k_df = src.analyze.create_or_load_bon_jailbreaking_text_pass_at_k_df(
     refresh=False,
     # refresh=True,
 )
@@ -25,11 +27,11 @@ bon_jailbreaking_pass_at_k_df = src.analyze.create_or_load_bon_jailbreaking_pass
 plt.close()
 plt.figure(figsize=(10, 6))
 g = sns.lineplot(
-    data=bon_jailbreaking_pass_at_k_df,
+    data=bon_jailbreaking_text_pass_at_k_df,
     x="Scaling Parameter",
     y="Score",
     hue="Model",
-    hue_order=src.globals.BON_JAILBREAKING_MODELS_ORDER,
+    hue_order=src.globals.BON_JAILBREAKING_TEXT_MODELS_ORDER,
     style="Modality",
 )
 g.set(
@@ -46,9 +48,9 @@ src.plot.save_plot_with_multiple_extensions(
 # plt.show()
 
 bon_jailbreaking_neg_log_avg_pass_at_k_df = (
-    bon_jailbreaking_pass_at_k_df.groupby(["Model", "Modality", "Scaling Parameter"])[
-        "Score"
-    ]
+    bon_jailbreaking_text_pass_at_k_df.groupby(
+        ["Model", "Modality", "Scaling Parameter"]
+    )["Score"]
     .mean()
     .reset_index()
 )
@@ -66,7 +68,8 @@ bon_jailbreaking_neg_log_avg_pass_at_k_df["Neg Log Score"] = -np.log(
     groupby_cols=["Model", "Modality"],
 )
 
-print("Fitted Power Laws Parameters: ", fitted_power_law_parameters_df)
+print("Fitted Power Laws Parameters: ")
+pprint.pprint(fitted_power_law_parameters_df)
 
 plt.close()
 plt.figure(figsize=(10, 6))
@@ -75,7 +78,7 @@ g = sns.lineplot(
     x="Scaling Parameter",
     y="Neg Log Score",
     hue="Model",
-    hue_order=src.globals.BON_JAILBREAKING_MODELS_ORDER,
+    hue_order=src.globals.BON_JAILBREAKING_TEXT_MODELS_ORDER,
     style="Modality",
 )
 g = sns.lineplot(
@@ -83,7 +86,7 @@ g = sns.lineplot(
     x="Scaling Parameter",
     y="Predicted Neg Log Score",
     hue="Model",
-    hue_order=src.globals.BON_JAILBREAKING_MODELS_ORDER,
+    hue_order=src.globals.BON_JAILBREAKING_TEXT_MODELS_ORDER,
     # style="Modality",
     legend=False,
     linestyle="--",
@@ -106,15 +109,16 @@ src.plot.save_plot_with_multiple_extensions(
 
 plt.close()
 g = sns.relplot(
-    data=bon_jailbreaking_pass_at_k_df,
+    data=bon_jailbreaking_text_pass_at_k_df,
     kind="line",
     x="Scaling Parameter",
     y="Score",
     units="Problem Idx",
     hue="Model",
-    hue_order=src.globals.BON_JAILBREAKING_MODELS_ORDER,
+    hue_order=src.globals.BON_JAILBREAKING_TEXT_MODELS_ORDER,
+    style="Modality",
     col="Model",
-    col_order=src.globals.BON_JAILBREAKING_MODELS_ORDER,
+    col_order=src.globals.BON_JAILBREAKING_TEXT_MODELS_ORDER,
     col_wrap=4,
     estimator=None,
 )
@@ -136,15 +140,16 @@ src.plot.save_plot_with_multiple_extensions(
 
 plt.close()
 g = sns.relplot(
-    data=bon_jailbreaking_pass_at_k_df,
+    data=bon_jailbreaking_text_pass_at_k_df,
     kind="line",
     x="Scaling Parameter",
     y="Neg Log Score",
     units="Problem Idx",
     hue="Model",
-    hue_order=src.globals.BON_JAILBREAKING_MODELS_ORDER,
+    hue_order=src.globals.BON_JAILBREAKING_TEXT_MODELS_ORDER,
+    style="Modality",
     col="Model",
-    col_order=src.globals.BON_JAILBREAKING_MODELS_ORDER,
+    col_order=src.globals.BON_JAILBREAKING_TEXT_MODELS_ORDER,
     col_wrap=4,
     estimator=None,
 )
@@ -156,7 +161,7 @@ g.set(
     xlabel=r"Num. Attempts per Prompt $k$",
 )
 # For each subplot, plot the aggregate power law behavior in black.
-for ax, model in zip(g.axes.flat, src.globals.BON_JAILBREAKING_MODELS_ORDER):
+for ax, model in zip(g.axes.flat, src.globals.BON_JAILBREAKING_TEXT_MODELS_ORDER):
     model_df = bon_jailbreaking_neg_log_avg_pass_at_k_df[
         bon_jailbreaking_neg_log_avg_pass_at_k_df["Model"] == model
     ]
@@ -180,8 +185,8 @@ src.plot.save_plot_with_multiple_extensions(
 
 plt.close()
 # Create better bins that handle zero and near-zero values
-smallest_nonzero_pass_at_1 = bon_jailbreaking_pass_at_k_df[
-    bon_jailbreaking_pass_at_k_df["Score"] > 0.0
+smallest_nonzero_pass_at_1 = bon_jailbreaking_text_pass_at_k_df[
+    bon_jailbreaking_text_pass_at_k_df["Score"] > 0.0
 ]["Score"].min()
 # Round smallest_nonzero_value to the nearest power of 10.
 smallest_nonzero_pass_at_1 = 10.0 ** np.floor(np.log10(smallest_nonzero_pass_at_1))
@@ -194,16 +199,16 @@ all_bins = np.concatenate(
     [[-small_value_for_plotting], [small_value_for_plotting], log_bins]
 )
 g = sns.displot(
-    data=bon_jailbreaking_pass_at_k_df[
-        bon_jailbreaking_pass_at_k_df["Scaling Parameter"] == 1
+    data=bon_jailbreaking_text_pass_at_k_df[
+        bon_jailbreaking_text_pass_at_k_df["Scaling Parameter"] == 1
     ],
     kind="hist",
     x="Score",
     hue="Model",
-    hue_order=src.globals.BON_JAILBREAKING_MODELS_ORDER,
+    hue_order=src.globals.BON_JAILBREAKING_TEXT_MODELS_ORDER,
     bins=all_bins,
     col="Model",
-    col_order=src.globals.BON_JAILBREAKING_MODELS_ORDER,
+    col_order=src.globals.BON_JAILBREAKING_TEXT_MODELS_ORDER,
     col_wrap=4,
 )
 g.set(
@@ -213,7 +218,7 @@ g.set(
 )
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))
-g.fig.suptitle("Best-of-N Jailbreaking")
+g.fig.suptitle("Best-of-N Jailbreaking (Modality = Text)")
 g.fig.subplots_adjust(top=0.9)
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
@@ -222,4 +227,4 @@ src.plot.save_plot_with_multiple_extensions(
 # plt.show()
 
 
-print("Finished notebooks/00_bon_jailbreaking_eda/00_bon_jailbreaking_eda.py!")
+print("Finished notebooks/00_bon_jailbreaking_text_eda!")

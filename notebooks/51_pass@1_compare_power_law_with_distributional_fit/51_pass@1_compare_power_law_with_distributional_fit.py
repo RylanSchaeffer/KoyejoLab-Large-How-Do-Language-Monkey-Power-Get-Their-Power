@@ -101,7 +101,7 @@ src.plot.save_plot_with_multiple_extensions(
 # plt.show()
 
 
-bon_jailbreaking_pass_at_k_df = src.analyze.create_or_load_bon_jailbreaking_pass_at_k_df(
+bon_jailbreaking_pass_at_k_df = src.analyze.create_or_load_bon_jailbreaking_text_pass_at_k_df(
     refresh=False,
     # refresh=True,
 )
@@ -158,7 +158,7 @@ g = sns.scatterplot(
     x="Power Law Exponent_BetaBinom",
     y="Power Law Exponent_LstSqrs",
     hue="Model",
-    hue_order=src.globals.BON_JAILBREAKING_MODELS_ORDER,
+    hue_order=src.globals.BON_JAILBREAKING_TEXT_MODELS_ORDER,
     style="Modality",
     s=150,
 )

@@ -21,7 +21,7 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
 )
 
 
-bon_jailbreaking_pass_at_k_df = src.analyze.create_or_load_bon_jailbreaking_pass_at_k_df(
+bon_jailbreaking_pass_at_k_df = src.analyze.create_or_load_bon_jailbreaking_text_pass_at_k_df(
     refresh=False,
     # refresh=True,
 )
@@ -83,7 +83,7 @@ g = sns.scatterplot(
     x="alpha",
     y="beta",
     hue="Model",
-    hue_order=src.globals.BON_JAILBREAKING_MODELS_ORDER,
+    hue_order=src.globals.BON_JAILBREAKING_TEXT_MODELS_ORDER,
     style="Modality",
     s=200,
 )
@@ -122,14 +122,14 @@ g = sns.displot(
     kind="hist",
     x="Score",
     hue="Model",
-    hue_order=src.globals.BON_JAILBREAKING_MODELS_ORDER,
+    hue_order=src.globals.BON_JAILBREAKING_TEXT_MODELS_ORDER,
     bins=all_bins,
     col="Model",
-    col_order=src.globals.BON_JAILBREAKING_MODELS_ORDER,
+    col_order=src.globals.BON_JAILBREAKING_TEXT_MODELS_ORDER,
     col_wrap=4,
 )
 # Add the fit Beta distributions.
-for ax_idx, model_name in enumerate(src.globals.BON_JAILBREAKING_MODELS_ORDER):
+for ax_idx, model_name in enumerate(src.globals.BON_JAILBREAKING_TEXT_MODELS_ORDER):
     model_df = bon_jailbreaking_pass_at_1_beta_fits_df[
         bon_jailbreaking_pass_at_1_beta_fits_df["Model"] == model_name
     ]
