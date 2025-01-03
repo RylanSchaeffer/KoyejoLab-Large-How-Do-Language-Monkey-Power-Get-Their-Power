@@ -1,4 +1,7 @@
 # Largely arbitrarily chosen. We want to trade off density and speed.
+BON_JAILBREAKING_GROUPBY_COLS = ["Model", "Modality"]
+
+# TODO: Replace with uniform spacing.
 BON_JAILBREAKING_Ks_LIST = [
     1,
     2,
@@ -103,6 +106,7 @@ BON_JAILBREAKING_Ks_LIST = [
     10000,
 ]
 
+
 BON_JAILBREAKING_MODALITY_TO_NICE_STRINGS = {
     "audio": "Audio",
     "text": "Text",
@@ -149,25 +153,7 @@ LARGE_LANGUAGE_MONKEYS_CODING_MODELS_ORDER = [
     "Gemma 7B",
 ]
 
-LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER = [
-    "Pythia 70M",
-    "Pythia 160M",
-    "Pythia 410M",
-    "Pythia 1B",
-    "Pythia 2.8B",
-    "Pythia 6.9B",
-    "Pythia 12B",
-]
-
-LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_TO_NICE_STRINGS = {
-    "Pythia_70M_300B": "Pythia 70M",
-    "Pythia_160M_300B": "Pythia 160M",
-    "Pythia_410M_300B": "Pythia 410M",
-    "Pythia_1B_300B": "Pythia 1B",
-    "Pythia_2.8B_300B": "Pythia 2.8B",
-    "Pythia_6.9B_300B": "Pythia 6.9B",
-    "Pythia_12B_300B": "Pythia 12B",
-}
+LARGE_LANGUAGE_MONKEYS_GROUPBY_COLS = ["Model", "Benchmark"]
 
 LARGE_LANGUAGE_MONKEYS_ORIGINAL_Ks_LIST = [
     1,
@@ -272,6 +258,26 @@ LARGE_LANGUAGE_MONKEYS_ORIGINAL_Ks_LIST = [
     9500,
     10000,
 ]
+
+LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER = [
+    "Pythia 70M",
+    "Pythia 160M",
+    "Pythia 410M",
+    "Pythia 1B",
+    "Pythia 2.8B",
+    "Pythia 6.9B",
+    "Pythia 12B",
+]
+
+LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_TO_NICE_STRINGS = {
+    "Pythia_70M_300B": "Pythia 70M",
+    "Pythia_160M_300B": "Pythia 160M",
+    "Pythia_410M_300B": "Pythia 410M",
+    "Pythia_1B_300B": "Pythia 1B",
+    "Pythia_2.8B_300B": "Pythia 2.8B",
+    "Pythia_6.9B_300B": "Pythia 6.9B",
+    "Pythia_12B_300B": "Pythia 12B",
+}
 
 MANY_SHOT_IN_CONTEXT_LEARNING_DATASET_ORDER = [
     "CommonsenseQA",

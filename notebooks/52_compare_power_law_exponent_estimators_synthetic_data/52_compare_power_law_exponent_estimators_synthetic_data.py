@@ -5,13 +5,10 @@ import numpy as np
 import os
 import pandas as pd
 import pprint
-
 import scipy.stats
 import seaborn as sns
-from typing import Any, Dict, List, Tuple
 
 import src.analyze
-import src.globals
 import src.plot
 import src.utils
 
@@ -21,7 +18,7 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
     refresh=False,
 )
 
-synthetic_scaling_exponents_df = src.analyze.create_or_load_synthetic_scaling_coefficient_data_df(
+cv_synthetic_scaling_exponents_df = src.analyze.create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
     refresh=False,
     # refresh=True,
 )
@@ -29,7 +26,7 @@ synthetic_scaling_exponents_df = src.analyze.create_or_load_synthetic_scaling_co
 
 plt.close()
 g = sns.relplot(
-    data=synthetic_scaling_exponents_df,
+    data=cv_synthetic_scaling_exponents_df,
     kind="line",
     x=r"Num. Samples per Problem ($n$)",
     y="Relative Error",

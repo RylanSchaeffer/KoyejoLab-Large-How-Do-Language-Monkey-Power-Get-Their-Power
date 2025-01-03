@@ -19,9 +19,6 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
     refresh=False,
 )
 
-llmonkeys_pythia_math_groupby_cols = ["Model", "Benchmark"]
-bon_jailbreaking_groupby_cols = ["Model", "Modality"]
-
 
 llmonkeys_pythia_math_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_pythia_math_pass_at_k_df(
     refresh=False,
@@ -30,7 +27,7 @@ llmonkeys_pythia_math_pass_at_k_df = src.analyze.create_or_load_large_language_m
 
 llmonkeys_pythia_math_neg_log_avg_pass_at_k_df = (
     llmonkeys_pythia_math_pass_at_k_df.groupby(
-        llmonkeys_pythia_math_groupby_cols + ["Scaling Parameter"]
+        src.globals.LARGE_LANGUAGE_MONKEYS_GROUPBY_COLS + ["Scaling Parameter"]
     )["Score"]
     .mean()
     .reset_index()
@@ -46,7 +43,7 @@ llmonkeys_pythia_math_neg_log_avg_pass_at_k_df["Neg Log Score"] = -np.log(
     llmonkeys_pythia_math_neg_log_avg_pass_at_k_df,
     covariate_col="Scaling Parameter",
     target_col="Neg Log Score",
-    groupby_cols=llmonkeys_pythia_math_groupby_cols,
+    groupby_cols=src.globals.LARGE_LANGUAGE_MONKEYS_GROUPBY_COLS,
 )
 print("Large Language Monkeys Least Squares Fit: ")
 pprint.pprint(llmonkeys_lst_sqrs_fitted_power_law_parameters_df)
@@ -65,12 +62,12 @@ pprint.pprint(llmonkeys_pythia_math_beta_binomial_mle_df)
 
 llmonkeys_joint_power_law_and_distr_fit_df = pd.merge(
     llmonkeys_pythia_math_beta_binomial_mle_df[
-        llmonkeys_pythia_math_groupby_cols + ["Power Law Exponent"]
+        src.globals.LARGE_LANGUAGE_MONKEYS_GROUPBY_COLS + ["Power Law Exponent"]
     ],
     llmonkeys_lst_sqrs_fitted_power_law_parameters_df[
-        llmonkeys_pythia_math_groupby_cols + ["Power Law Exponent"]
+        src.globals.LARGE_LANGUAGE_MONKEYS_GROUPBY_COLS + ["Power Law Exponent"]
     ],
-    on=llmonkeys_pythia_math_groupby_cols,
+    on=src.globals.LARGE_LANGUAGE_MONKEYS_GROUPBY_COLS,
     how="inner",
     suffixes=("_BetaBinom", "_LstSqrs"),
 )
@@ -91,8 +88,8 @@ g = sns.scatterplot(
 g.plot([0, 1], [0, 1], ls="--", c=".3")
 g.set(
     title="Large Language Monkeys",
-    xlim=(0.00, 0.6),
-    ylim=(0.00, 0.6),
+    xlim=(0.0, 0.6),
+    ylim=(0.0, 0.6),
     xlabel=r"Power Law Exponent (Beta-Binomial)",
     ylabel="Power Law Exponent (Least Squares)",
 )
@@ -127,7 +124,7 @@ bon_jailbreaking_neg_log_avg_pass_at_k_df["Neg Log Score"] = -np.log(
     bon_jailbreaking_neg_log_avg_pass_at_k_df,
     covariate_col="Scaling Parameter",
     target_col="Neg Log Score",
-    groupby_cols=bon_jailbreaking_groupby_cols,
+    groupby_cols=src.globals.BON_JAILBREAKING_GROUPBY_COLS,
 )
 print(
     "Best-of-N Jailbreaking Least Squares Fit: ",
@@ -145,12 +142,12 @@ pprint.pprint(bon_jailbreaking_beta_binomial_mle_df)
 
 bon_jailbreaking_joint_power_law_and_distr_fit_df = pd.merge(
     bon_jailbreaking_beta_binomial_mle_df[
-        bon_jailbreaking_groupby_cols + ["Power Law Exponent"]
+        src.globals.BON_JAILBREAKING_GROUPBY_COLS + ["Power Law Exponent"]
     ],
     bon_jailbreaking_lst_sqrs_fitted_power_law_parameters_df[
-        bon_jailbreaking_groupby_cols + ["Power Law Exponent"]
+        src.globals.BON_JAILBREAKING_GROUPBY_COLS + ["Power Law Exponent"]
     ],
-    on=bon_jailbreaking_groupby_cols,
+    on=src.globals.BON_JAILBREAKING_GROUPBY_COLS,
     how="inner",
     suffixes=("_BetaBinom", "_LstSqrs"),
 )
