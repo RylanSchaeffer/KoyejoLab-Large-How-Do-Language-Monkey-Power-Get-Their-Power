@@ -149,21 +149,21 @@ sns.heatmap(
     cbar=False,
 )
 ax00.set(
-    xlabel="Problems",
+    xlabel="Problem",
     ylabel="Sample per Problem",
     title=r"Step 0: Score Each Attempt",
 )
-# ax01 = axes[0, 1]
 sns.heatmap(
     data=estimated_pass_i_at_k_pivoted_df,
     ax=ax01,
     cmap="cool",
     # cbar_kws={"label": r"$\widehat{\operatorname{pass_i@k}}$"},
     norm=LogNorm(),
+    cbar=False,
 )
 ax01.set(
     xlabel=r"Number of Attempts $k$",
-    ylabel="Problems",
+    ylabel="Problem",
     title=r"Step 1: Estimate $\operatorname{pass_i@k}$",
 )
 # ax02 = axes[0, 2]
