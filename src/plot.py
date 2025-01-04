@@ -32,8 +32,8 @@ def save_plot_with_multiple_extensions(plot_dir: str, plot_filename: str):
     plt.gcf().tight_layout()
 
     extensions = [
-        "pdf",
         "png",
+        "pdf",
     ]
     for extension in extensions:
         plot_path = os.path.join(plot_dir, plot_filename + f".{extension}")
