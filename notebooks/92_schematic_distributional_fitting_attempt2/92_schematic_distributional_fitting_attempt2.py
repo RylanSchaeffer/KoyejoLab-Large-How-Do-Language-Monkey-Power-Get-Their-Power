@@ -1,4 +1,4 @@
-from matplotlib.colors import LogNorm
+from matplotlib.colors import LogNorm, SymLogNorm
 import matplotlib.pyplot as plt
 from matplotlib.patches import ConnectionPatch
 import numpy as np
@@ -49,6 +49,23 @@ individual_outcomes_per_problem_pivoted_df = individual_outcomes_per_problem_df.
     columns="Problem Idx",
     values="Score",
 )
+num_samples_and_num_successes_df = (
+    src.analyze.convert_individual_outcomes_to_num_samples_and_num_successes_df(
+        individual_outcomes_df=individual_outcomes_per_problem_df,
+        groupby_cols=["Problem Idx"],
+    )
+)
+num_samples_and_num_successes_df.rename(
+    columns={
+        "Num. Samples Total": "Samples",
+        "Num. Samples Correct": "Successes",
+    },
+    inplace=True,
+)
+num_samples_and_num_successes_df.index = num_samples_and_num_successes_df[
+    "Problem Idx"
+].values
+num_samples_and_num_successes_df.drop(columns=["Problem Idx"], inplace=True)
 
 # Least Squares Step 2: Convert individual outcomes to pass_i@k
 estimated_pass_i_at_k_df = src.analyze.compute_pass_at_k_from_individual_outcomes(
@@ -145,13 +162,16 @@ ax12 = fig.add_subplot(gs[1, 2])
 ax13 = fig.add_subplot(gs[1, 3])
 fig.subplots_adjust(wspace=0.5)  # Increased spacing between subplots
 sns.heatmap(
-    data=individual_outcomes_per_problem_pivoted_df,
+    data=num_samples_and_num_successes_df,
     ax=ax00,
-    cbar=False,
+    cmap="Spectral_r",
+    norm=SymLogNorm(linthresh=1.0),
+    linewidths=0.0,
 )
+# plt.setp(ax00.get_xticklabels(), rotation=45, ha="right")
+ax00.tick_params(axis="x", labelrotation=30)
 ax00.set(
-    xlabel="Problem",
-    ylabel="Sample per Problem",
+    ylabel="Problem",
     title=r"Step 0: Score Samples",
 )
 ax01.set_axis_off()
@@ -162,6 +182,7 @@ sns.heatmap(
     # cbar_kws={"label": r"$\widehat{\operatorname{pass_i@k}}$"},
     norm=LogNorm(vmax=1.0),
     vmax=1.0,
+    linewidths=0.0,
 )
 ax02.set(
     xlabel=r"Number of Attempts $k$",
@@ -201,7 +222,7 @@ handles = [
         label="Estimated",
     ),
 ]
-ax03.legend(handles=handles, loc="lower left")
+ax03.legend(handles=handles, loc="lower left", fontsize=21)
 ax03.set(
     xscale="log",
     yscale="log",
@@ -271,7 +292,7 @@ handles = [
         label="Simulated",
     ),
 ]
-ax13.legend(handles=handles, loc="lower left")
+ax13.legend(handles=handles, loc="lower left", fontsize=21)
 ax13.set(
     xscale="log",
     yscale="log",
