@@ -79,7 +79,7 @@ estimated_pass_D_at_k_df["Neg Log Score"] = -np.log(estimated_pass_D_at_k_df["Sc
     target_col="Neg Log Score",
     groupby_cols=["groupby_placeholder"],
 )
-estimated_pass_D_at_k_df["Data Type"] = "Real"
+estimated_pass_D_at_k_df["Data Type"] = "Estimated"
 
 # Create the true distribution.
 beta_distributution_df = pd.DataFrame.from_dict(
@@ -128,21 +128,22 @@ predicted_pass_at_k_df = pd.DataFrame.from_dict(
     groupby_cols=["groupby_placeholder"],
 )
 predicted_pass_at_k_df["Data Type"] = predicted_pass_at_k_df["Scaling Parameter"].apply(
-    lambda k_: "Real" if k_ == 1 else "Simulated"
+    lambda k_: "Estimated" if k_ == 1 else "Simulated"
 )
-
 
 plt.close()
 # Create a figure with a special gridspec layout
-fig = plt.figure(figsize=(18, 12))
-gs = fig.add_gridspec(2, 3, width_ratios=[0.7, 1, 1])
+fig = plt.figure(figsize=(18, 10))
+gs = fig.add_gridspec(2, 4, width_ratios=[0.7, 0.7, 1.2, 1.2])
 # Create the merged axis for the left column
 ax00 = fig.add_subplot(gs[:, 0])  # This spans both rows in the first column
 ax01 = fig.add_subplot(gs[0, 1])
 ax02 = fig.add_subplot(gs[0, 2])
+ax03 = fig.add_subplot(gs[0, 3])
 ax11 = fig.add_subplot(gs[1, 1])
 ax12 = fig.add_subplot(gs[1, 2])
-# fig.subplots_adjust(wspace=0.5)  # Increased spacing between subplots
+ax13 = fig.add_subplot(gs[1, 3])
+fig.subplots_adjust(wspace=0.5)  # Increased spacing between subplots
 sns.heatmap(
     data=individual_outcomes_per_problem_pivoted_df,
     ax=ax00,
@@ -151,28 +152,28 @@ sns.heatmap(
 ax00.set(
     xlabel="Problem",
     ylabel="Sample per Problem",
-    title=r"Step 0: Score Each Attempt",
+    title=r"Step 0: Score Samples",
 )
+ax01.set_axis_off()
 sns.heatmap(
     data=estimated_pass_i_at_k_pivoted_df,
-    ax=ax01,
+    ax=ax02,
     cmap="cool",
     # cbar_kws={"label": r"$\widehat{\operatorname{pass_i@k}}$"},
-    norm=LogNorm(),
-    cbar=False,
+    norm=LogNorm(vmax=1.0),
+    vmax=1.0,
 )
-ax01.set(
+ax02.set(
     xlabel=r"Number of Attempts $k$",
     ylabel="Problem",
     title=r"Step 1: Estimate $\operatorname{pass_i@k}$",
 )
-# ax02 = axes[0, 2]
 sns.lineplot(
     data=estimated_pass_D_at_k_df,
     x="Scaling Parameter",
     y="Predicted Neg Log Score",
     color="black",
-    ax=ax02,
+    ax=ax03,
     linewidth=2,
 )
 sns.scatterplot(
@@ -182,10 +183,10 @@ sns.scatterplot(
     hue="Scaling Parameter",
     hue_norm=LogNorm(),
     style="Data Type",
-    style_order=["Real", "Simulated"],
+    style_order=["Estimated", "Simulated"],
     s=300,
     palette="copper",
-    ax=ax02,
+    ax=ax03,
     legend=False,
 )
 # Create custom legend only for Data Type
@@ -197,18 +198,18 @@ handles = [
         color="black",
         linestyle="None",
         markersize=10,
-        label="Real",
+        label="Estimated",
     ),
 ]
-ax02.legend(handles=handles, loc="lower left")
-ax02.set(
+ax03.legend(handles=handles, loc="lower left")
+ax03.set(
     xscale="log",
     yscale="log",
     xlabel=r"Number of Attempts $k$",
-    ylabel=r"$-\log (\widehat{\operatorname{pass_{\mathcal{D}}@k}})$",
-    title="Step 2: Fit Power Law",
+    ylabel=r"$-\log (\operatorname{pass_{\mathcal{D}}@k})$",
+    title=r"Step 2: Fit Estimated $\operatorname{pass_{\mathcal{D}}@k}$",
 )
-# ax11 = axes[1, 1]
+ax11.set_axis_off()
 sns.scatterplot(
     data=beta_distributution_df,
     x=r"$x$",
@@ -218,14 +219,9 @@ sns.scatterplot(
     palette="cool",
     hue_norm=LogNorm(),
     linewidth=0,
-    ax=ax11,
+    ax=ax12,
 )
-# sns.histplot(
-#     data=estimated_pass_i_at_1_df,
-#     x="Score",
-#     ax=ax11,
-# )
-ax11.set(
+ax12.set(
     xscale="log",
     xlim=(pass_at_1.min(), 1.0),
     xlabel=r"$\operatorname{pass_i@1}$",
@@ -238,7 +234,7 @@ sns.lineplot(
     y="Predicted Neg Log Score",
     color="black",
     linewidth=2,
-    ax=ax12,
+    ax=ax13,
 )
 scatter = sns.scatterplot(
     data=predicted_pass_at_k_df,
@@ -246,13 +242,13 @@ scatter = sns.scatterplot(
     y="Neg Log Score",
     hue="Scaling Parameter",
     style="Data Type",
-    style_order=["Real", "Simulated"],
+    style_order=["Estimated", "Simulated"],
     hue_norm=LogNorm(),
     legend=False,
     palette="copper",
     linewidth=0,
     s=300,
-    ax=ax12,
+    ax=ax13,
 )
 # Create custom legend only for Data Type
 handles = [
@@ -263,7 +259,7 @@ handles = [
         color="black",
         linestyle="None",
         markersize=10,
-        label="Real",
+        label="Estimated",
     ),
     plt.Line2D(
         [],
@@ -275,26 +271,59 @@ handles = [
         label="Simulated",
     ),
 ]
-ax12.legend(handles=handles, loc="lower left")
-ax12.set(
+ax13.legend(handles=handles, loc="lower left")
+ax13.set(
     xscale="log",
     yscale="log",
     xlabel=r"Number of Attempts $k$",
-    ylabel=r"$-\log (\widehat{\operatorname{pass_{\mathcal{D}}@k}})$",
-    title=r"Step 2: Fit Power Law",
+    ylabel=r"$-\log (\operatorname{pass_{\mathcal{D}}@k})$",
+    title=r"Step 2: Fit Simulated $\operatorname{pass_{\mathcal{D}}@k}$",
 )
 fig.text(
-    0.90,
-    0.85,
-    r"$\approx \hat{a} \; k^{-\hat{b}}$",
+    0.33,
+    0.81,
+    "Least Squares\nEstimator",
     fontsize=30,
     ha="center",
     va="center",
 )
 fig.text(
-    0.90,
+    0.33,
+    0.33,
+    "Distributional\nEstimator",
+    fontsize=30,
+    ha="center",
+    va="center",
+)
+fig.text(
+    0.33,
+    0.73,
+    r"$\longrightarrow$",
+    fontsize=30,
+    ha="center",
+    va="center",
+)
+fig.text(
+    0.33,
+    0.25,
+    r"$\longrightarrow$",
+    fontsize=30,
+    ha="center",
+    va="center",
+)
+
+fig.text(
+    0.92,
+    0.85,
+    r"$\approx \hat{a} \, k^{-\hat{b}}$",
+    fontsize=30,
+    ha="center",
+    va="center",
+)
+fig.text(
+    0.92,
     0.35,
-    r"$\approx \hat{a} \; k^{-\hat{b}}$",
+    r"$\approx \hat{a} \, k^{-\hat{b}}$",
     fontsize=30,
     ha="center",
     va="center",
@@ -303,7 +332,6 @@ plt.tight_layout()
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir, plot_filename="distributional_fitting_schematic"
 )
-# plt.show()
-
+plt.show()
 
 print("Finished0 notebooks/92_schematic_distributional_fitting")
