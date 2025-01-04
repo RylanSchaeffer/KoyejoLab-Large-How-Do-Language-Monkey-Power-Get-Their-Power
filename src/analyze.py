@@ -13,7 +13,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import src.globals
 
 # Increase precision.
-mpmath.mp.prec = 1000
+mpmath.mp.prec = 100
 
 # This helps print more columns.
 pd.set_option("display.width", 1000)
@@ -139,7 +139,7 @@ def compute_beta_three_parameter_distribution_integral(
     """
 
     # Parameter validation
-    if not (0 < scale < 1 and alpha > 0 and beta > 0):
+    if not (0.0 < scale <= 1.0 and alpha > 0 and beta > 0):
         raise ValueError(
             f"Invalid parameters: alpha: {alpha}, beta: {beta}, scale: {scale}"
         )
@@ -319,7 +319,7 @@ def compute_scaling_exponent_from_distributional_fit(
     k_values: Optional[Union[np.ndarray, List[float]]] = None,
 ) -> pd.DataFrame:
     if k_values is None:
-        k_values = np.unique(np.logspace(0, 5, 10, dtype=int))
+        k_values = np.unique(np.logspace(0, 5, 20, dtype=int))
     if isinstance(k_values, list):
         k_values = np.array(k_values)
 
@@ -1076,14 +1076,17 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
 
         true_distribution_to_params_dict = {
             "beta": [
-                {"a": 0.05, "b": 1.5},
-                {"a": 0.05, "b": 5.0},
-                {"a": 0.1, "b": 1.5},
-                {"a": 0.1, "b": 5.0},
+                {"a": 0.05, "b": 1.5, "scale": 1.0},
+                {"a": 0.05, "b": 3.5, "scale": 1.0},
+                {"a": 0.2, "b": 1.5, "scale": 1.0},
+                {"a": 0.2, "b": 3.5, "scale": 1.0},
             ],
-            # "kumaraswamy": [
-            #     {"a": 0.05, "b": 1.5},
-            # ]
+            "kumaraswamy": [
+                {"a": 0.05, "b": 1.5, "scale": 1.0},
+                {"a": 0.05, "b": 3.5, "scale": 1.0},
+                {"a": 0.2, "b": 1.5, "scale": 1.0},
+                {"a": 0.2, "b": 3.5, "scale": 1.0},
+            ]
             # "scaled_beta": [
             #     {"a": 0.5, "b": 1.0, "scale": 0.05},
             #     {"a": 0.5, "b": 1.0, "scale": 0.1},
@@ -2784,7 +2787,21 @@ def sample_synthetic_individual_outcomes_per_problem_df(
             size=(num_samples_per_problem, num_problems),
         ).T
     elif distribution == "kumaraswamy":
-        raise NotImplementedError
+        # Generate samples from Kumaraswamy distribution
+        a = distribution_parameters["a"]
+        b = distribution_parameters["b"]
+        scale = distribution_parameters.get("scale", 1.0)
+        # TODO: Take scale into account.
+        # Generate uniform random variables
+        u = np.random.uniform(0.0, 1.0, size=(num_problems,))
+        # Transform to Kumaraswamy using inverse CDF.
+        true_pass_at_1_per_problem = np.power(1.0 - np.power(1.0 - u, 1.0 / b), 1.0 / a)
+        assert np.all(0.0 <= true_pass_at_1_per_problem <= 1.0)
+        # Shape: (num_problems, num_samples_per_problem)
+        individual_outcomes = scipy.stats.bernoulli.rvs(
+            p=true_pass_at_1_per_problem,
+            size=(num_samples_per_problem, num_problems),
+        ).T
     else:
         raise NotImplementedError
 
