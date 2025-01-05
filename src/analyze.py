@@ -138,6 +138,10 @@ def compute_beta_three_parameter_distribution_integral(
         Result of the integral or nan if parameters are invalid
     """
 
+    # Previous fit failed.
+    if np.isnan(alpha) and np.isnan(beta) and np.isnan(scale):
+        return np.nan
+
     # Parameter validation
     if not (0.0 < scale <= 1.0 and alpha > 0 and beta > 0):
         raise ValueError(
@@ -1080,14 +1084,14 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
             "beta": [
                 {"a": 0.05, "b": 1.5, "scale": 1.0},
                 {"a": 0.05, "b": 3.5, "scale": 1.0},
-                {"a": 0.2, "b": 1.5, "scale": 1.0},
-                {"a": 0.2, "b": 3.5, "scale": 1.0},
+                {"a": 0.2, "b": 1.5, "scale": 0.3},
+                {"a": 0.2, "b": 3.5, "scale": 0.3},
             ],
             "kumaraswamy": [
-                {"a": 0.05, "b": 1.5, "scale": 1.0},
-                {"a": 0.05, "b": 3.5, "scale": 1.0},
-                {"a": 0.2, "b": 1.5, "scale": 1.0},
-                {"a": 0.2, "b": 3.5, "scale": 1.0},
+                # {"a": 0.05, "b": 1.5, "scale": 1.0},
+                # {"a": 0.05, "b": 3.5, "scale": 1.0},
+                # {"a": 0.2, "b": 1.5, "scale": 1.0},
+                # {"a": 0.2, "b": 3.5, "scale": 1.0},
             ]
             # "scaled_beta": [
             #     {"a": 0.5, "b": 1.0, "scale": 0.05},
@@ -1099,8 +1103,8 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
             # ],
         }
         fit_distributions = [
-            "beta",
-            "kumaraswamy",
+            "Beta",
+            "Kumaraswamy",
         ]
 
         scaling_exponents_dfs_list = []
@@ -1113,7 +1117,7 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
                 # 1. Generate synthetic data, sweeping over multiple true distributions and distributional parameters.
                 if true_distribution == "beta":
                     true_asymptotic_power_law_exponent = true_distribution_params["a"]
-                    true_distribution_nice_str = f"Beta({true_distribution_params['a']}, {true_distribution_params['b']})"
+                    true_distribution_nice_str = f"Beta({true_distribution_params['a']}, {true_distribution_params['b']}, {true_distribution_params['scale']})"
 
                 elif true_distribution == "continuous_bernoulli":
                     true_asymptotic_power_law_exponent = 1.0
@@ -1122,13 +1126,13 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
                     )
                 elif true_distribution == "kumaraswamy":
                     true_asymptotic_power_law_exponent = true_distribution_params["a"]
-                    true_distribution_nice_str = f"Kumaraswamy({true_distribution_params['a']}, {true_distribution_params['b']})"
+                    true_distribution_nice_str = f"Kumaraswamy({true_distribution_params['a']}, {true_distribution_params['b']}, {true_distribution_params['scale']})"
                 else:
                     raise NotImplementedError(
                         f"Unknown distribution: {true_distribution}"
                     )
 
-                for simulation_idx in np.arange(1, dtype=int):
+                for simulation_idx in np.arange(30, dtype=int):
                     individual_outcomes_per_problem_df = (
                         sample_synthetic_individual_outcomes_per_problem_df(
                             num_problems=1024,
@@ -1144,6 +1148,7 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
                     df[
                         "True Distribution Asymptotic Power Law Exponent"
                     ] = true_asymptotic_power_law_exponent
+                    df["Fit Distribution"] = fit_distribution
                     df["Simulation Idx"] = simulation_idx
                     scaling_exponents_dfs_list.append(df)
 
@@ -1151,16 +1156,22 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
             scaling_exponents_dfs_list, ignore_index=True
         ).reset_index(drop=True)
 
-        synthetic_scaling_exponents_df[r"$(\beta - \hat{\beta})^2$"] = 0.5 * np.square(
-            synthetic_scaling_exponents_df["Power Law Exponent"]
-            - synthetic_scaling_exponents_df["True Power Law Exponent"]
+        synthetic_scaling_exponents_df["Asymptotic Squared Error"] = 0.5 * np.square(
+            synthetic_scaling_exponents_df["Fit Power Law Exponent"]
+            - synthetic_scaling_exponents_df[
+                "True Distribution Asymptotic Power Law Exponent"
+            ]
         )
-        synthetic_scaling_exponents_df["Relative Error"] = np.divide(
+        synthetic_scaling_exponents_df["Asymptotic Relative Error"] = np.divide(
             np.abs(
-                synthetic_scaling_exponents_df["Power Law Exponent"]
-                - synthetic_scaling_exponents_df["True Power Law Exponent"]
+                synthetic_scaling_exponents_df["Fit Power Law Exponent"]
+                - synthetic_scaling_exponents_df[
+                    "True Distribution Asymptotic Power Law Exponent"
+                ]
             ),
-            synthetic_scaling_exponents_df["True Power Law Exponent"],
+            synthetic_scaling_exponents_df[
+                "True Distribution Asymptotic Power Law Exponent"
+            ],
         )
         synthetic_scaling_exponents_df.to_parquet(
             path=synthetic_scaling_exponents_data_path
@@ -2004,16 +2015,17 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
         num_problems_list = [
             64,
             96,
-            # 128,
+            128,
+            256,
         ]
         assert max(num_problems_list) <= len(unique_problem_indices)
     if num_samples_per_problem_list is None:
         num_samples_per_problem_list = [
             100,
             316,
-            # 1000,
-            # 3162,
-            # 10000,
+            1000,
+            3162,
+            10000,
         ]
         assert max(num_samples_per_problem_list) <= len(unique_attempt_indices)
 
@@ -2027,15 +2039,13 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
         ).values
     )
 
-    ks_list: List[int] = (
+    ks_list: List[int] = np.unique(
         np.logspace(
             0,
             np.log10(max_num_samples_per_problem),
-            max_num_samples_per_problem // 10,
-        )
-        .astype(int)
-        .tolist()
-    )
+            100,  # Fit using 100 samples.
+        ).astype(int)
+    ).tolist()
 
     # Step 1: Compute the "true" power law exponent using least-squares fitting on all the data.
     pass_at_k_df = src.analyze.compute_pass_at_k_from_individual_outcomes(
@@ -2058,15 +2068,12 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
     )
 
     # Note: These aren't actually the true parameters but we will treat them as true for our analysis.
-    # true_log_power_law_prefactor = least_sqrs_fitted_power_law_parameters_df[
-    #     "Log Power Law Prefactor"
-    # ].values[0]
-    # true_power_law_prefactor = least_sqrs_fitted_power_law_parameters_df[
-    #     "Power Law Prefactor"
-    # ].values[0]
-    true_power_law_exponent = least_sqrs_fitted_power_law_parameters_df[
-        "Power Law Exponent"
-    ].values[0]
+    full_data_least_squares_power_law_prefactor = (
+        least_sqrs_fitted_power_law_parameters_df["Power Law Prefactor"].values[0]
+    )
+    full_data_least_squares_power_law_exponent = (
+        least_sqrs_fitted_power_law_parameters_df["Power Law Exponent"].values[0]
+    )
 
     # Clean up.
     del pass_at_k_df, avg_pass_at_k_df, least_sqrs_fitted_power_law_parameters_df
@@ -2105,23 +2112,35 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
     cross_validated_power_law_coefficient_estimators_df = pd.concat(
         cross_validated_power_law_coefficient_estimators_dfs_list, ignore_index=True
     ).reset_index(drop=True)
+
     cross_validated_power_law_coefficient_estimators_df[
-        "True Power Law Exponent"
-    ] = true_power_law_exponent
-    cross_validated_power_law_coefficient_estimators_df["Squared Error"] = np.square(
+        "Full Data Least Squares Power Law Exponent"
+    ] = full_data_least_squares_power_law_prefactor
+    cross_validated_power_law_coefficient_estimators_df[
+        "Full Data Least Squares Power Law Exponent"
+    ] = full_data_least_squares_power_law_exponent
+    cross_validated_power_law_coefficient_estimators_df[
+        "Full Data Least Squares Squared Error"
+    ] = np.square(
         cross_validated_power_law_coefficient_estimators_df["Fit Power Law Exponent"]
-        - cross_validated_power_law_coefficient_estimators_df["True Power Law Exponent"]
+        - cross_validated_power_law_coefficient_estimators_df[
+            "Full Data Least Squares Power Law Exponent"
+        ]
     )
-    cross_validated_power_law_coefficient_estimators_df["Relative Error"] = np.divide(
+    cross_validated_power_law_coefficient_estimators_df[
+        "Full Data Least Squares Relative Error"
+    ] = np.divide(
         np.abs(
             cross_validated_power_law_coefficient_estimators_df[
                 "Fit Power Law Exponent"
             ]
             - cross_validated_power_law_coefficient_estimators_df[
-                "True Power Law Exponent"
+                "Full Data Least Squares Power Law Exponent"
             ]
         ),
-        cross_validated_power_law_coefficient_estimators_df["True Power Law Exponent"],
+        cross_validated_power_law_coefficient_estimators_df[
+            "Full Data Least Squares Power Law Exponent"
+        ],
     )
     return cross_validated_power_law_coefficient_estimators_df
 
@@ -2153,7 +2172,7 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
         np.logspace(
             0,
             np.log10(num_samples_per_problem),
-            num_samples_per_problem // 10,
+            100,
         ).astype(int)
     ).tolist()
 
@@ -2293,12 +2312,21 @@ def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
 ) -> pd.Series:
     num_data = len(num_samples_and_num_successes_df)
     num_samples = num_samples_and_num_successes_df["Num. Samples Total"].values
-    # if epsilon is None:
-    #     # Heuristic: Epsilon should be (at least) 2 orders of magnitude smaller than
-    #     # the sampling resolution.
-    #     epsilon = 1. / num_samples.max() / 100.
-
     num_successes = num_samples_and_num_successes_df["Num. Samples Correct"].values
+    if np.all(num_successes == 0):
+        result = pd.Series(
+            {
+                "alpha": np.nan,
+                "beta": np.nan,
+                "loc": np.nan,
+                "scale": np.nan,
+                "neg_log_likelihood": np.nan,
+                "maxiter": maxiter,
+                "success": "Failure (Num Successes All Zeros)",
+            }
+        )
+        return result
+
     fraction_successes = np.divide(num_successes, num_samples)
     largest_fraction_successes = np.max(fraction_successes)
     # Compute scale as (n+1) * max(fraction_successes) / n.
@@ -2308,12 +2336,14 @@ def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
     # in close form or even numerically?
     # TODO(rylan): Investigate this further.
     scale = (num_data + 1.0) * largest_fraction_successes / num_data
-    # Make sure that scale isn't more than 1.0.
+    # Make sure that scale isn't more than 1.0 + epsilon.
     scale = min(scale, 1.0)
 
     # Start with reasonable initial alpha, beta.
     alpha, beta, _, _ = scipy.stats.beta.fit(
-        fraction_successes + epsilon,
+        np.clip(
+            fraction_successes, epsilon, 1.0 - epsilon
+        ),  # Make sure that we remain in [0., 1.]
         floc=0.0,
         fscale=scale,
     )
@@ -2355,6 +2385,7 @@ def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
             "scale": scale,
             "neg_log_likelihood": neg_log_likelihood,
             "maxiter": maxiter,
+            "success": "Success" if optimize_result.success else "Failure",
         }
     )
     return result
@@ -2704,15 +2735,28 @@ def fit_power_law(
 
     def fit_group(group_df):
         x = group_df[covariate_col]
-        y = group_df[target_col]
-
         # Exclude any np.inf or np.nan values
         which_x_finite = np.isfinite(x)
         if np.all(~which_x_finite):
-            raise ValueError(f"No valid x to fit the power law model.\nx: {x}")
+            return pd.Series(
+                {
+                    "Log Power Law Prefactor": np.nan,
+                    "Power Law Prefactor": np.nan,
+                    "Power Law Exponent": np.nan,
+                    "Status": f"Failure (All NaN {covariate_col})",
+                }
+            )
+        y = group_df[target_col]
         which_y_finite = np.isfinite(y)
         if np.all(~which_y_finite):
-            raise ValueError(f"No valid y to fit the power law model.\ny: {y}")
+            return pd.Series(
+                {
+                    "Log Power Law Prefactor": np.nan,
+                    "Power Law Prefactor": np.nan,
+                    "Power Law Exponent": np.nan,
+                    "Status": f"Failure (All NaN {target_col})",
+                }
+            )
         mask = which_x_finite & which_y_finite
         if np.all(~mask):
             raise ValueError(
@@ -2752,7 +2796,7 @@ def fit_power_law(
                 "Log Power Law Prefactor": result.x[0],
                 "Power Law Prefactor": np.exp(result.x[0]),
                 "Power Law Exponent": result.x[1],
-                "Status": "Success" if result.success else "Failure",
+                "Status": "Success" if result.success else "Failure (Fitting)",
             }
         )
 

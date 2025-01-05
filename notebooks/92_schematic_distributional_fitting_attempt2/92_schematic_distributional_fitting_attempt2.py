@@ -172,7 +172,7 @@ sns.heatmap(
 ax00.tick_params(axis="x", labelrotation=30)
 ax00.set(
     ylabel="Problem",
-    title=r"Step 0: Score Samples",
+    title=r"Score Samples",
 )
 ax01.set_axis_off()
 sns.heatmap(
@@ -187,7 +187,7 @@ sns.heatmap(
 ax02.set(
     xlabel=r"Number of Attempts $k$",
     ylabel="Problem",
-    title=r"Step 1: Estimate $\operatorname{pass_i@k}$",
+    title=r"Estimate $\operatorname{pass_i@k}$",
 )
 sns.lineplot(
     data=estimated_pass_D_at_k_df,
@@ -228,7 +228,7 @@ ax03.set(
     yscale="log",
     xlabel=r"Number of Attempts $k$",
     ylabel=r"$-\log (\operatorname{pass_{\mathcal{D}}@k})$",
-    title=r"Step 2: Fit Estimated $\operatorname{pass_{\mathcal{D}}@k}$",
+    title=r"Fit Estimated $\operatorname{pass_{\mathcal{D}}@k}$",
 )
 ax11.set_axis_off()
 sns.scatterplot(
@@ -247,7 +247,7 @@ ax12.set(
     xlim=(pass_at_1.min(), 1.0),
     xlabel=r"$\operatorname{pass_i@1}$",
     ylabel=r"$p_{\mathcal{D}}(\operatorname{pass_i@1})$",
-    title=r"Step 1: Fit $\operatorname{pass_i@1}$ Distribution",
+    title=r"Fit $\operatorname{pass_i@1}$ Distribution",
 )
 sns.lineplot(
     data=predicted_pass_at_k_df,
@@ -298,7 +298,7 @@ ax13.set(
     yscale="log",
     xlabel=r"Number of Attempts $k$",
     ylabel=r"$-\log (\operatorname{pass_{\mathcal{D}}@k})$",
-    title=r"Step 2: Fit Simulated $\operatorname{pass_{\mathcal{D}}@k}$",
+    title=r"Fit Simulated $\operatorname{pass_{\mathcal{D}}@k}$",
 )
 fig.text(
     0.33,
@@ -332,7 +332,6 @@ fig.text(
     ha="center",
     va="center",
 )
-
 fig.text(
     0.92,
     0.85,
@@ -346,6 +345,46 @@ fig.text(
     0.35,
     r"$\approx \hat{a} \, k^{-\hat{b}}$",
     fontsize=30,
+    ha="center",
+    va="center",
+)
+fig.text(
+    0,
+    1.0,
+    "A",
+    fontsize=35,
+    ha="center",
+    va="center",
+)
+fig.text(
+    0.43,
+    1.0,
+    "B",
+    fontsize=35,
+    ha="center",
+    va="center",
+)
+fig.text(
+    0.71,
+    1.0,
+    "C",
+    fontsize=35,
+    ha="center",
+    va="center",
+)
+fig.text(
+    0.43,
+    0.49,
+    "D",
+    fontsize=35,
+    ha="center",
+    va="center",
+)
+fig.text(
+    0.71,
+    0.49,
+    "E",
+    fontsize=35,
     ha="center",
     va="center",
 )

@@ -28,14 +28,14 @@ plt.close()
 g = sns.relplot(
     data=cv_synthetic_scaling_exponents_df,
     kind="line",
-    x=r"Num. Samples per Problem ($n$)",
-    y="Relative Error",
+    x="Num. Samples per Problem",
+    y="Full Data Least Squares Relative Error",
     hue="Fit Method",
     palette="cool",
     style="Num. Problems",
     col="True Distribution",
     row="Fit Distribution",
-    facet_kws={"margin_titles": True},
+    facet_kws={"margin_titles": True, "sharey": False},
 )
 g.set(
     xscale="log",
@@ -65,32 +65,52 @@ fig.text(
 )
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
-    plot_filename="y=relative_error_x=n_hue=distribution_params_col=distribution",
+    plot_filename="y=relative_error_least_squares_x=n_hue=distribution_params_col=distribution",
 )
 plt.show()
 
-# plt.close()
-# g = sns.relplot(
-#     data=synthetic_scaling_exponents_df,
-#     kind="line",
-#     x=r"Num. Samples per Problem ($n$)",
-#     y="Fit Scaling Exponent",
-#     col="True Distribution Parameters",
-#     hue="Num. Problems",
-#     hue_norm=LogNorm(),
-#     palette="cool",
-#     style="Fit Method",
-#     row="True Distribution",
-#     facet_kws={"margin_titles": True},
-# )
-# g.set(
-#     xscale="log",
-#     xlabel=r"Num. Samples per Problem ($n$)",
-# )
-# g.set_titles(col_template="{col_name}")
-# sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
-# src.plot.save_plot_with_multiple_extensions(
-#     plot_dir=results_dir,
-#     plot_filename="y=fit_scaling_exponent_x=n_hue=distribution_params_style=fit_method_col=distribution",
-# )
-# plt.show()
+
+plt.close()
+g = sns.relplot(
+    data=cv_synthetic_scaling_exponents_df,
+    kind="line",
+    x="Num. Samples per Problem",
+    y="Asymptotic Relative Error",
+    hue="Fit Method",
+    palette="cool",
+    style="Num. Problems",
+    col="True Distribution",
+    row="Fit Distribution",
+    facet_kws={"margin_titles": True, "sharey": False},
+)
+g.set(
+    xscale="log",
+    yscale="log",
+    ylabel=r"Relative Error := $|\hat{b} - b| / b$",
+)
+g.set_titles(col_template="{col_name}", row_template="{row_name}")
+sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
+fig = plt.gcf()
+# Add text as a "row title" to the right of the row facet titles.
+fig.text(
+    1.0,
+    0.50,
+    "Fit Distribution",
+    fontsize=30,
+    rotation=-90,
+    ha="center",
+    va="center",
+)
+fig.text(
+    0.50,
+    1.0,
+    "True Distribution",
+    fontsize=30,
+    ha="center",
+    va="center",
+)
+src.plot.save_plot_with_multiple_extensions(
+    plot_dir=results_dir,
+    plot_filename="y=relative_error_asymptotic_x=n_hue=distribution_params_col=distribution",
+)
+plt.show()
