@@ -55,9 +55,7 @@ llmonkeys_pythia_math_beta_binomial_mle_df = src.analyze.create_or_load_large_la
 )
 
 
-print(
-    "Large Language Monkeys ScaledBeta-Binomial 3-Parameter Fit: ",
-)
+print("Large Language Monkeys ScaledBeta-Binomial 3-Parameter Fit: ")
 pprint.pprint(llmonkeys_pythia_math_beta_binomial_mle_df)
 
 llmonkeys_joint_power_law_and_distr_fit_df = pd.merge(
@@ -107,9 +105,9 @@ bon_jailbreaking_pass_at_k_df = src.analyze.create_or_load_bon_jailbreaking_text
 )
 
 bon_jailbreaking_neg_log_avg_pass_at_k_df = (
-    bon_jailbreaking_pass_at_k_df.groupby(["Model", "Modality", "Scaling Parameter"])[
-        "Score"
-    ]
+    bon_jailbreaking_pass_at_k_df.groupby(
+        src.globals.BON_JAILBREAKING_GROUPBY_COLS + ["Scaling Parameter"]
+    )["Score"]
     .mean()
     .reset_index()
 )
@@ -126,14 +124,12 @@ bon_jailbreaking_neg_log_avg_pass_at_k_df["Neg Log Score"] = -np.log(
     target_col="Neg Log Score",
     groupby_cols=src.globals.BON_JAILBREAKING_GROUPBY_COLS,
 )
-print(
-    "Best-of-N Jailbreaking Least Squares Fit: ",
-    bon_jailbreaking_lst_sqrs_fitted_power_law_parameters_df,
-)
+print("Best-of-N Jailbreaking Least Squares Fit: ")
+pprint.pprint(bon_jailbreaking_lst_sqrs_fitted_power_law_parameters_df)
 
 bon_jailbreaking_beta_binomial_mle_df = src.analyze.create_or_load_bon_jailbreaking_beta_binomial_mle_df(
-    refresh=False,
-    # refresh=True,
+    # refresh=False,
+    refresh=True,
 )
 
 print("Best-of-N Jailbreaking ScaledBeta-Binomial 3-Parameter Fit: ")
@@ -176,7 +172,7 @@ src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
     plot_filename="bon_jailbreaking_y=scaling_law_exponent_x=distributional_fit_exponent",
 )
-plt.show()
+# plt.show()
 
 
 print("Finished notebooks/51_pass@1_compare_power_law_with_distributional_fit!")

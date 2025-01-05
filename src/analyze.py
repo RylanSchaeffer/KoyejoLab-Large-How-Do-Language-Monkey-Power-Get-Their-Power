@@ -489,9 +489,7 @@ def create_or_load_bon_jailbreaking_beta_binomial_mle_df(
     )
     if refresh or not os.path.exists(bon_jailbreaking_beta_binomial_mle_df_path):
         print(f"Creating {bon_jailbreaking_beta_binomial_mle_df_path} anew...")
-        bon_jailbreaking_groupby_cols = ["Model", "Modality"]
 
-        raise NotImplementedError("Update this function to handle multiple modalities.")
         bon_jailbreaking_individual_outcomes_df = src.analyze.create_or_load_bon_jailbreaking_text_individual_outcomes_df(
             refresh=False,
             # refresh=True,
@@ -499,13 +497,14 @@ def create_or_load_bon_jailbreaking_beta_binomial_mle_df(
         bon_jailbreaking_num_samples_and_num_successes_df = (
             src.analyze.convert_individual_outcomes_to_num_samples_and_num_successes_df(
                 individual_outcomes_df=bon_jailbreaking_individual_outcomes_df,
-                groupby_cols=bon_jailbreaking_groupby_cols + ["Problem Idx"],
+                groupby_cols=src.globals.BON_JAILBREAKING_GROUPBY_COLS
+                + ["Problem Idx"],
             )
         )
 
         bon_jailbreaking_beta_binomial_mle_df = (
             bon_jailbreaking_num_samples_and_num_successes_df.groupby(
-                bon_jailbreaking_groupby_cols
+                src.globals.BON_JAILBREAKING_GROUPBY_COLS
             )
             .apply(
                 lambda df: src.analyze.fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
@@ -1074,6 +1073,9 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
         # 3. Fit the distributional parameters to the synthetic data.
         # 4. Compute the scaling exponent from the distributional fits.
 
+        # Seed to make this reproducible.
+        np.random.seed(0)
+
         true_distribution_to_params_dict = {
             "beta": [
                 {"a": 0.05, "b": 1.5, "scale": 1.0},
@@ -1110,27 +1112,27 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
             ]:
                 # 1. Generate synthetic data, sweeping over multiple true distributions and distributional parameters.
                 if true_distribution == "beta":
-                    true_scaling_exponent = true_distribution_params["a"]
+                    true_asymptotic_power_law_exponent = true_distribution_params["a"]
                     true_distribution_nice_str = f"Beta({true_distribution_params['a']}, {true_distribution_params['b']})"
 
                 elif true_distribution == "continuous_bernoulli":
-                    true_scaling_exponent = 1.0
+                    true_asymptotic_power_law_exponent = 1.0
                     true_distribution_nice_str = (
                         f"Continuous Bernoulli({true_distribution_params['lam']})"
                     )
                 elif true_distribution == "kumaraswamy":
-                    true_scaling_exponent = true_distribution_params["a"]
+                    true_asymptotic_power_law_exponent = true_distribution_params["a"]
                     true_distribution_nice_str = f"Kumaraswamy({true_distribution_params['a']}, {true_distribution_params['b']})"
                 else:
                     raise NotImplementedError(
                         f"Unknown distribution: {true_distribution}"
                     )
 
-                for _ in np.arange(10, dtype=int):
+                for simulation_idx in np.arange(1, dtype=int):
                     individual_outcomes_per_problem_df = (
                         sample_synthetic_individual_outcomes_per_problem_df(
-                            num_problems=512,
-                            num_samples_per_problem=16000,
+                            num_problems=1024,
+                            num_samples_per_problem=20000,
                             distribution=true_distribution,
                             distribution_parameters=true_distribution_params,
                         )
@@ -1139,7 +1141,10 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
                         individual_outcomes_per_problem_df=individual_outcomes_per_problem_df,
                     )
                     df["True Distribution"] = true_distribution_nice_str
-                    df["True Power Law Exponent"] = true_scaling_exponent
+                    df[
+                        "True Distribution Asymptotic Power Law Exponent"
+                    ] = true_asymptotic_power_law_exponent
+                    df["Simulation Idx"] = simulation_idx
                     scaling_exponents_dfs_list.append(df)
 
         synthetic_scaling_exponents_df = pd.concat(
@@ -2070,10 +2075,9 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
     all_combos = itertools.product(
         num_problems_list, num_samples_per_problem_list, range(num_repeats)
     )
-    scaling_exponents_dfs_list = joblib.Parallel(n_jobs=10)(
-        joblib.delayed(
-            cross_validate_power_law_coefficient_estimators_from_individual_outcomes_helper
-        )(
+    cross_validated_power_law_coefficient_estimators_dfs_list = []
+    for num_problems, num_samples_per_problem, repeat_idx in all_combos:
+        df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes_helper(
             num_problems,
             num_samples_per_problem,
             repeat_idx,
@@ -2082,18 +2086,29 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
             unique_problem_indices,
             unique_attempt_indices,
         )
-        for num_problems, num_samples_per_problem, repeat_idx in all_combos
-    )
+        cross_validated_power_law_coefficient_estimators_dfs_list.append(df)
+    # cross_validated_power_law_coefficient_estimators_dfs_list = joblib.Parallel(n_jobs=10)(
+    #     joblib.delayed(
+    #         cross_validate_power_law_coefficient_estimators_from_individual_outcomes_helper
+    #     )(
+    #         num_problems,
+    #         num_samples_per_problem,
+    #         repeat_idx,
+    #         individual_outcomes_per_problem,
+    #         individual_outcomes_per_problem_df,
+    #         unique_problem_indices,
+    #         unique_attempt_indices,
+    #     )
+    #     for num_problems, num_samples_per_problem, repeat_idx in all_combos
+    # )
 
     cross_validated_power_law_coefficient_estimators_df = pd.concat(
-        scaling_exponents_dfs_list, ignore_index=True
+        cross_validated_power_law_coefficient_estimators_dfs_list, ignore_index=True
     ).reset_index(drop=True)
     cross_validated_power_law_coefficient_estimators_df[
         "True Power Law Exponent"
     ] = true_power_law_exponent
-    cross_validated_power_law_coefficient_estimators_df[
-        r"$(\beta - \hat{\beta})^2$"
-    ] = 0.5 * np.square(
+    cross_validated_power_law_coefficient_estimators_df["Squared Error"] = np.square(
         cross_validated_power_law_coefficient_estimators_df["Fit Power Law Exponent"]
         - cross_validated_power_law_coefficient_estimators_df["True Power Law Exponent"]
     )
@@ -2166,7 +2181,12 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
     df_lst_sqrs_fit = pd.DataFrame(
         {
             "Num. Problems": num_problems,
-            r"Num. Samples per Problem ($n$)": [num_samples_per_problem],
+            "Num. Samples per Problem": [num_samples_per_problem],
+            "Fit Power Law Prefactor": [
+                subset_least_sqrs_fitted_power_law_parameters_df[
+                    "Power Law Prefactor"
+                ].values[0]
+            ],
             "Fit Power Law Exponent": [
                 subset_least_sqrs_fitted_power_law_parameters_df[
                     "Power Law Exponent"
@@ -2215,8 +2235,11 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
         {
             "Num. Problems": num_problems,
             "Num. Samples per Problem": [num_samples_per_problem],
+            "Fit Power Law Prefactor": [
+                subset_beta_binomial_mle_df["Power Law Exponent"].values[0]
+            ],
             "Fit Power Law Exponent": [
-                subset_beta_binomial_mle_df["Power Law Exponent"]
+                subset_beta_binomial_mle_df["Power Law Exponent"].values[0]
             ],
             "Fit Method": "Distribution",
             "Repeat Index": [repeat_idx],
@@ -2264,66 +2287,65 @@ def estimate_pass_at_k(
 
 def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
     num_samples_and_num_successes_df: pd.DataFrame,
-    maxiter: int = 10,
-    epsilon: float = 1e-8,
+    maxiter: int = 25,
+    # epsilon: Optional[float] = None,
+    epsilon: Optional[float] = 1e-6,
 ) -> pd.Series:
     num_data = len(num_samples_and_num_successes_df)
     num_samples = num_samples_and_num_successes_df["Num. Samples Total"].values
+    # if epsilon is None:
+    #     # Heuristic: Epsilon should be (at least) 2 orders of magnitude smaller than
+    #     # the sampling resolution.
+    #     epsilon = 1. / num_samples.max() / 100.
+
     num_successes = num_samples_and_num_successes_df["Num. Samples Correct"].values
     fraction_successes = np.divide(num_successes, num_samples)
-    # Add epsilon to ensure every datum is supported.
-    largest_fraction_successes = np.max(fraction_successes) + epsilon
-    # Start with reasonable initial parameters.
-    try:
-        alpha, beta, _, _ = scipy.stats.beta.fit(
-            fraction_successes + epsilon,
-            floc=0.0,
-            fscale=largest_fraction_successes + epsilon,
-        )
-    except Exception as e:
-        # Reasonable defaults.
-        alpha = 0.5
-        beta = 3.0
-
-    # Inflate to correct for bias; is this correct?
+    largest_fraction_successes = np.max(fraction_successes)
+    # Compute scale as (n+1) * max(fraction_successes) / n.
+    # We inflate the scale to correct for bias; is this correct?
     # I think we actually want to divide by the expected value of the maximum of
     # n i.i.d. Beta(alpha, beta) random variables. But this doesn't appear to exist
     # in close form or even numerically?
     # TODO(rylan): Investigate this further.
     scale = (num_data + 1.0) * largest_fraction_successes / num_data
+    # Make sure that scale isn't more than 1.0.
+    scale = min(scale, 1.0)
+
+    # Start with reasonable initial alpha, beta.
+    alpha, beta, _, _ = scipy.stats.beta.fit(
+        fraction_successes + epsilon,
+        floc=0.0,
+        fscale=scale,
+    )
     initial_params = (alpha, beta)
+    # Create extremely generous bounds for alpha, beta.
     bounds = [
         (0.01, 100),
         (0.01, 100),
     ]
 
     # Fit alpha, beta, scale to the scaled beta binomial
-    try:
-        optimize_result = scipy.optimize.minimize(
-            lambda params: compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
-                params,
-                scale=scale,
-                num_samples=num_samples,
-                num_successes=num_successes,
-            ),
-            x0=initial_params,
-            bounds=bounds,
-            method="L-BFGS-B",
-            options=dict(
-                maxiter=maxiter,
-                maxls=200,
-                gtol=1e-4,  # Gradient tolerance, adjust as needed),
-                ftol=1e-4,
-            ),
-        )
-        alpha = optimize_result.x[0]
-        beta = optimize_result.x[1]
-        neg_log_likelihood = optimize_result.fun
-    except Exception as e:
-        # TODO(rylan): Debug scipy.stats._continuous_distns.FitSolverError: Solver for the MLE equations failed to converge: The iteration is not making good progress, as measured by the   improvement from the last ten iterations.
-        alpha = np.nan
-        beta = np.nan
-        neg_log_likelihood = np.nan
+    # try:
+    optimize_result = scipy.optimize.minimize(
+        lambda params: compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
+            params,
+            scale=scale,
+            num_samples=num_samples,
+            num_successes=num_successes,
+        ),
+        x0=initial_params,
+        bounds=bounds,
+        method="L-BFGS-B",
+        options=dict(
+            maxiter=maxiter,
+            maxls=200,
+            gtol=1e-4,  # Gradient tolerance, adjust as needed),
+            ftol=1e-4,
+        ),
+    )
+    alpha = optimize_result.x[0]
+    beta = optimize_result.x[1]
+    neg_log_likelihood = optimize_result.fun
 
     result = pd.Series(
         {
@@ -2332,9 +2354,6 @@ def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
             "loc": 0.0,
             "scale": scale,
             "neg_log_likelihood": neg_log_likelihood,
-            # "aic": 2 * len(initial_params) + 2 * optimize_result.fun,
-            # "bic": len(initial_params) * np.log(len(num_samples_and_num_successes_df))
-            # + 2 * optimize_result.fun,
             "maxiter": maxiter,
         }
     )
@@ -2791,12 +2810,18 @@ def sample_synthetic_individual_outcomes_per_problem_df(
         a = distribution_parameters["a"]
         b = distribution_parameters["b"]
         scale = distribution_parameters.get("scale", 1.0)
-        # TODO: Take scale into account.
+        if scale != 1.0:
+            # TODO: Take scale into account.
+            raise NotImplementedError(
+                "Scale parameter not yet implemented for Kumaraswamy."
+            )
         # Generate uniform random variables
         u = np.random.uniform(0.0, 1.0, size=(num_problems,))
         # Transform to Kumaraswamy using inverse CDF.
         true_pass_at_1_per_problem = np.power(1.0 - np.power(1.0 - u, 1.0 / b), 1.0 / a)
-        assert np.all(0.0 <= true_pass_at_1_per_problem <= 1.0)
+        assert np.all(
+            (0.0 <= true_pass_at_1_per_problem) & (true_pass_at_1_per_problem <= 1.0)
+        )
         # Shape: (num_problems, num_samples_per_problem)
         individual_outcomes = scipy.stats.bernoulli.rvs(
             p=true_pass_at_1_per_problem,
