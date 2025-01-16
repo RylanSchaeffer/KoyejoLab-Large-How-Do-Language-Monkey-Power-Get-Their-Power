@@ -5,6 +5,7 @@ import mpmath
 import numpy as np
 import os
 import pandas as pd
+import pprint
 from scipy import integrate
 from scipy.optimize import minimize
 import scipy.stats
@@ -1132,17 +1133,18 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
                         f"Unknown distribution: {true_distribution}"
                     )
 
-                for simulation_idx in np.arange(30, dtype=int):
+                for simulation_idx in np.arange(2, dtype=int):
                     individual_outcomes_per_problem_df = (
                         sample_synthetic_individual_outcomes_per_problem_df(
-                            num_problems=1024,
-                            num_samples_per_problem=20000,
+                            num_problems=10_000,
+                            num_samples_per_problem=10_000_000,
                             distribution=true_distribution,
                             distribution_parameters=true_distribution_params,
                         )
                     )
                     df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
                         individual_outcomes_per_problem_df=individual_outcomes_per_problem_df,
+                        num_repeats=10,
                     )
                     df["True Distribution"] = true_distribution_nice_str
                     df[
@@ -1150,6 +1152,7 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
                     ] = true_asymptotic_power_law_exponent
                     df["Fit Distribution"] = fit_distribution
                     df["Simulation Idx"] = simulation_idx
+                    pprint.pprint(df)
                     scaling_exponents_dfs_list.append(df)
 
         synthetic_scaling_exponents_df = pd.concat(
@@ -2024,8 +2027,8 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
             100,
             316,
             1000,
-            3162,
-            10000,
+            # 3162,
+            # 10000,
         ]
         assert max(num_samples_per_problem_list) <= len(unique_attempt_indices)
 
@@ -2043,7 +2046,7 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
         np.logspace(
             0,
             np.log10(max_num_samples_per_problem),
-            100,  # Fit using 100 samples.
+            100,  # Fit using 100 uniformly spaced samples.
         ).astype(int)
     ).tolist()
 
@@ -2082,22 +2085,10 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
     all_combos = itertools.product(
         num_problems_list, num_samples_per_problem_list, range(num_repeats)
     )
-    cross_validated_power_law_coefficient_estimators_dfs_list = []
-    for num_problems, num_samples_per_problem, repeat_idx in all_combos:
-        df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes_helper(
-            num_problems,
-            num_samples_per_problem,
-            repeat_idx,
-            individual_outcomes_per_problem,
-            individual_outcomes_per_problem_df,
-            unique_problem_indices,
-            unique_attempt_indices,
-        )
-        cross_validated_power_law_coefficient_estimators_dfs_list.append(df)
-    # cross_validated_power_law_coefficient_estimators_dfs_list = joblib.Parallel(n_jobs=10)(
-    #     joblib.delayed(
-    #         cross_validate_power_law_coefficient_estimators_from_individual_outcomes_helper
-    #     )(
+    # Implementation 1 (Serial).
+    # cross_validated_power_law_coefficient_estimators_dfs_list = []
+    # for num_problems, num_samples_per_problem, repeat_idx in all_combos:
+    #     df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes_helper(
     #         num_problems,
     #         num_samples_per_problem,
     #         repeat_idx,
@@ -2106,8 +2097,24 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
     #         unique_problem_indices,
     #         unique_attempt_indices,
     #     )
-    #     for num_problems, num_samples_per_problem, repeat_idx in all_combos
-    # )
+    #     cross_validated_power_law_coefficient_estimators_dfs_list.append(df)
+    # Implementation 2 (Parallel).
+    cross_validated_power_law_coefficient_estimators_dfs_list = joblib.Parallel(
+        n_jobs=10, backend="threading"
+    )(
+        joblib.delayed(
+            cross_validate_power_law_coefficient_estimators_from_individual_outcomes_helper
+        )(
+            num_problems,
+            num_samples_per_problem,
+            repeat_idx,
+            individual_outcomes_per_problem,
+            individual_outcomes_per_problem_df,
+            unique_problem_indices,
+            unique_attempt_indices,
+        )
+        for num_problems, num_samples_per_problem, repeat_idx in all_combos
+    )
 
     cross_validated_power_law_coefficient_estimators_df = pd.concat(
         cross_validated_power_law_coefficient_estimators_dfs_list, ignore_index=True
@@ -2885,3 +2892,34 @@ def sample_synthetic_individual_outcomes_per_problem_df(
         }
     )
     return individual_outcomes_per_problem_df
+
+
+def simulate_neg_log_avg_pass_at_k_from_beta_binomial_mle_df(
+    beta_binomial_df: pd.DataFrame,
+    columns_to_save: List[str],
+    k_values: Optional[np.ndarray] = None,
+) -> pd.DataFrame:
+    if k_values is None:
+        k_values = np.unique(np.logspace(0, 5, 20, dtype=int))
+
+    simulated_pass_at_k_dfs_list = []
+    for _, row in beta_binomial_df.iterrows():
+        integral_values = np.zeros_like(k_values, dtype=np.float64)
+        for k_idx, k in enumerate(k_values):
+            integral_values[
+                k_idx
+            ] = src.analyze.compute_beta_three_parameter_distribution_integral(
+                k=k,
+                alpha=row["alpha"],
+                beta=row["beta"],
+                scale=row["scale"],
+            )
+        data_dict = {
+            "Scaling Parameter": k_values,
+            "Neg Log Score": -np.log1p(-integral_values),
+        }
+        for column in columns_to_save:
+            data_dict[column] = [row[column]] * len(k_values)
+        simulated_pass_at_k_dfs_list.append(pd.DataFrame.from_dict(data_dict))
+    simulated_pass_at_k_dfs = pd.concat(simulated_pass_at_k_dfs_list, ignore_index=True)
+    return simulated_pass_at_k_dfs

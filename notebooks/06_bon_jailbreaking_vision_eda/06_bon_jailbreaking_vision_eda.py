@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
+from matplotlib.colors import LogNorm, SymLogNorm
 import numpy as np
 import os
 import pandas as pd
@@ -17,9 +17,35 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
     refresh=False,
 )
 
+bon_jailbreaking_vision_individual_outcomes_df = (
+    src.analyze.create_or_load_bon_jailbreaking_vision_individual_outcomes_df(
+        refresh=False,
+    )
+)
+
+gemini_1p5_pro_individual_outcomes_df = bon_jailbreaking_vision_individual_outcomes_df[
+    bon_jailbreaking_vision_individual_outcomes_df["Model"] == "Gemini 1.5 Pro"
+]
+gemini_1p5_pro_num_samples_and_num_successes_df = (
+    src.analyze.convert_individual_outcomes_to_num_samples_and_num_successes_df(
+        gemini_1p5_pro_individual_outcomes_df,
+        groupby_cols=["Problem Idx"],
+    )
+)
+print()
+plt.close()
+sns.heatmap(
+    gemini_1p5_pro_num_samples_and_num_successes_df[
+        ["Num. Samples Total", "Num. Samples Correct"]
+    ],
+    cmap="Spectral_r",
+    norm=SymLogNorm(linthresh=1.0),
+)
+plt.show()
+
 bon_jailbreaking_vision_pass_at_k_df = src.analyze.create_or_load_bon_jailbreaking_vision_pass_at_k_df(
-    # refresh=False,
-    refresh=True,
+    refresh=False,
+    # refresh=True,
 )
 
 plt.close()
