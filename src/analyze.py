@@ -82,6 +82,56 @@ def compute_beta_binomial_two_parameters_negative_log_likelihood(
     return -log_pmf
 
 
+def compute_beta_negative_binomial_three_parameters_distribution_neg_log_likelihood(
+    params: Tuple[float, float],
+    scale: float,
+    num_samples: np.ndarray,
+    num_successes: np.ndarray,
+) -> float:
+    """
+    3-parameter Beta-Binomial PMF using Gauss hypergeometric function:
+
+    P(X=x) = binom(n, x) * [c^x / B(alpha, beta)] * B(x + alpha, beta) * _2F_1(arguments).
+    """
+
+    alpha, beta = params
+    # scale = np.max(np.divide(num_successes, num_samples)) + 1e-16
+    nll_arr = np.zeros_like(num_samples, dtype=np.float64)
+    for idx, (n, x) in enumerate(zip(num_samples, num_successes)):
+        if not (0 <= x <= n):
+            return 0.0
+
+        # binomial coefficient binom(n, x)
+        binom_factor = mpmath.binomial(int(n), int(x))
+
+        # c^x
+        c_to_x = mpmath.power(scale, x)
+
+        # Beta(alpha, beta)
+        B_a_b = mpmath.beta(alpha, beta)
+
+        # Beta(x+alpha, beta)
+        B_xa_b = mpmath.beta(x + alpha, beta)
+
+        # hypergeometric function
+        #   _2F_1(-(n-x), x+alpha; x+alpha+beta; c)
+        # using mpmath.hyp2f1
+        f = mpmath.hyp2f1(
+            -(n - x),
+            x + alpha,
+            x + alpha + beta,
+            scale,
+            # nmaxterms=2000000,
+            # method="a+bt",
+        )
+        pmf = binom_factor * c_to_x * B_xa_b * f / B_a_b
+        nll = -mpmath.log(pmf)
+        nll_arr[idx] = float(nll)
+
+    avg_nll: float = np.mean(nll_arr)
+    return avg_nll
+
+
 def compute_beta_three_parameter_distribution_integrand(
     p: mpmath.mpf, k: int, alpha: mpmath.mpf, beta: mpmath.mpf, c: mpmath.mpf
 ) -> mpmath.mpf:
@@ -128,15 +178,8 @@ def compute_beta_three_parameter_distribution_integral(
     """
     Compute the integral using mpmath's high-precision integration.
 
-    Args:
-        k: Integer parameter
-        alpha: First shape parameter of the beta distribution
-        beta: Second shape parameter of the beta distribution
-        scale: Scale parameter (upper bound)
-        dps: Decimal places of precision (default: 50)
-
-    Returns:
-        Result of the integral or nan if parameters are invalid
+    Here, we want to compute the integral under a scaled Beta distribution:
+    \int_0^{scale} (1 - p)^k p(p; alpha, beta, scale) dp.
     """
 
     # Previous fit failed.
@@ -168,37 +211,44 @@ def compute_beta_three_parameter_distribution_integral(
         return float("nan")
 
 
-def compute_kumaraswamy_three_parameter_distribution_integrand(
-    p: float, k: int, alpha: float, beta: float, scale: float
-) -> float:
-    raise NotImplementedError
-
-
 def compute_kumaraswamy_three_parameter_distribution_integral(
     k: int, alpha: float, beta: float, scale: float
 ) -> float:
     """
-    Compute the integral using adaptive quadrature with improved error handling
+    Compute the integral using mpquad's high-precision integration.
+
+    Here, we want to compute the integral under a scaled Kumaraswamy distribution:
+    \int_0^{scale} (1 - p)^k p(p; alpha, beta, scale) dp.
     """
-    if not (0 < scale < 1 and alpha > 0 and beta > 0):
+    # Previous fit failed.
+    if np.isnan(alpha) and np.isnan(beta) and np.isnan(scale):
         return np.nan
 
-    # Use a smaller absolute tolerance and increase max evaluations
-    result, error = integrate.quad(
-        compute_kumaraswamy_three_parameter_distribution_integrand,
-        0.0,
-        scale,
-        args=(k, alpha, beta, scale),
-        epsabs=1e-12,
-        epsrel=1e-10,
-        limit=5000,
-    )
+    # Parameter validation
+    if not (0.0 < scale <= 1.0 and alpha > 0 and beta > 0):
+        raise ValueError(
+            f"Invalid parameters: alpha: {alpha}, beta: {beta}, scale: {scale}"
+        )
 
-    # Check if result is reasonable
-    if not np.isfinite(result) or error > 1e-3 * abs(result):
-        return np.nan
+    try:
+        # Precompute constant factors (to avoid repeating in integrand)
+        denom = mpmath.power(scale, alpha) / alpha / beta
 
-    return result
+        def integrand(p):
+            return (
+                mpmath.power(1.0 - p, k)
+                * mpmath.power(p, alpha - 1.0)
+                * mpmath.power(1 - mpmath.power(p / scale, alpha), beta - 1.0)
+            ) / denom
+
+        integral = mpmath.quad(integrand, [0, scale])
+        if integral < 0.0 or integral >= 1.0:
+            raise ValueError(
+                f"Integral invalid! Integral: {integral}, k: {k}, alpha: {alpha}, beta: {beta}, scale: {scale}"
+            )
+        return float(integral)
+    except (ValueError, TypeError, mpmath.libmp.NoConvergence):
+        return float("nan")
 
 
 def compute_discretized_neg_log_likelihood(
@@ -2352,7 +2402,7 @@ def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
             fraction_successes, epsilon, 1.0 - epsilon
         ),  # Make sure that we remain in [0., 1.]
         floc=0.0,
-        fscale=scale,
+        fscale=scale,  # Force the scale to be the max scale.
     )
     initial_params = (alpha, beta)
     # Create extremely generous bounds for alpha, beta.
@@ -2440,6 +2490,93 @@ def fit_beta_binomial_two_parameters_to_num_samples_and_num_successes(
         }
     )
 
+    return result
+
+
+def fit_beta_negative_binomial_three_parameters_to_num_samples_and_num_successes(
+    num_samples_and_num_successes_df: pd.DataFrame,
+    maxiter: int = 25,
+    # epsilon: Optional[float] = None,
+    epsilon: Optional[float] = 1e-6,
+) -> pd.Series:
+    num_data = len(num_samples_and_num_successes_df)
+    num_samples = num_samples_and_num_successes_df["Num. Samples Total"].values
+    num_successes = num_samples_and_num_successes_df["Num. Samples Correct"].values
+    if np.all(num_successes == 0):
+        result = pd.Series(
+            {
+                "alpha": np.nan,
+                "beta": np.nan,
+                "loc": np.nan,
+                "scale": np.nan,
+                "neg_log_likelihood": np.nan,
+                "maxiter": maxiter,
+                "success": "Failure (Num Successes All Zeros)",
+            }
+        )
+        return result
+
+    fraction_successes = np.divide(num_successes, num_samples)
+    largest_fraction_successes = np.max(fraction_successes)
+    # Compute scale as (n+1) * max(fraction_successes) / n.
+    # We inflate the scale to correct for bias; is this correct?
+    # I think we actually want to divide by the expected value of the maximum of
+    # n i.i.d. Beta(alpha, beta) random variables. But this doesn't appear to exist
+    # in close form or even numerically?
+    # TODO(rylan): Investigate this further.
+    scale = (num_data + 1.0) * largest_fraction_successes / num_data
+    # Make sure that scale isn't more than 1.0 + epsilon.
+    scale = min(scale, 1.0)
+
+    # Start with reasonable initial alpha, beta.
+    alpha, beta, _, _ = scipy.stats.beta.fit(
+        np.clip(
+            fraction_successes, epsilon, 1.0 - epsilon
+        ),  # Make sure that we remain in [0., 1.]
+        floc=0.0,
+        fscale=scale,  # Force the scale to be the max scale.
+    )
+    initial_params = (alpha, beta)
+    # Create extremely generous bounds for alpha, beta.
+    bounds = [
+        (0.01, 100),
+        (0.01, 100),
+    ]
+
+    # Fit alpha, beta, scale to the scaled beta binomial
+    # try:
+    optimize_result = scipy.optimize.minimize(
+        lambda params: compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
+            params,
+            scale=scale,
+            num_samples=num_samples,
+            num_successes=num_successes,
+        ),
+        x0=initial_params,
+        bounds=bounds,
+        method="L-BFGS-B",
+        options=dict(
+            maxiter=maxiter,
+            maxls=200,
+            gtol=1e-4,  # Gradient tolerance, adjust as needed),
+            ftol=1e-4,
+        ),
+    )
+    alpha = optimize_result.x[0]
+    beta = optimize_result.x[1]
+    neg_log_likelihood = optimize_result.fun
+
+    result = pd.Series(
+        {
+            "alpha": alpha,
+            "beta": beta,
+            "loc": 0.0,
+            "scale": scale,
+            "neg_log_likelihood": neg_log_likelihood,
+            "maxiter": maxiter,
+            "success": "Success" if optimize_result.success else "Failure",
+        }
+    )
     return result
 
 
@@ -2909,6 +3046,68 @@ def simulate_neg_log_avg_pass_at_k_from_beta_binomial_mle_df(
             integral_values[
                 k_idx
             ] = src.analyze.compute_beta_three_parameter_distribution_integral(
+                k=k,
+                alpha=row["alpha"],
+                beta=row["beta"],
+                scale=row["scale"],
+            )
+        data_dict = {
+            "Scaling Parameter": k_values,
+            "Neg Log Score": -np.log1p(-integral_values),
+        }
+        for column in columns_to_save:
+            data_dict[column] = [row[column]] * len(k_values)
+        simulated_pass_at_k_dfs_list.append(pd.DataFrame.from_dict(data_dict))
+    simulated_pass_at_k_dfs = pd.concat(simulated_pass_at_k_dfs_list, ignore_index=True)
+    return simulated_pass_at_k_dfs
+
+
+def simulate_neg_log_avg_pass_at_k_from_beta_negative_binomial_mle_df(
+    beta_negative_binomial_df: pd.DataFrame,
+    columns_to_save: List[str],
+    k_values: Optional[np.ndarray] = None,
+) -> pd.DataFrame:
+    if k_values is None:
+        k_values = np.unique(np.logspace(0, 5, 20, dtype=int))
+
+    simulated_pass_at_k_dfs_list = []
+    for _, row in beta_negative_binomial_df.iterrows():
+        integral_values = np.zeros_like(k_values, dtype=np.float64)
+        for k_idx, k in enumerate(k_values):
+            integral_values[
+                k_idx
+            ] = src.analyze.compute_beta_three_parameter_distribution_integral(
+                k=k,
+                alpha=row["alpha"],
+                beta=row["beta"],
+                scale=row["scale"],
+            )
+        data_dict = {
+            "Scaling Parameter": k_values,
+            "Neg Log Score": -np.log1p(-integral_values),
+        }
+        for column in columns_to_save:
+            data_dict[column] = [row[column]] * len(k_values)
+        simulated_pass_at_k_dfs_list.append(pd.DataFrame.from_dict(data_dict))
+    simulated_pass_at_k_dfs = pd.concat(simulated_pass_at_k_dfs_list, ignore_index=True)
+    return simulated_pass_at_k_dfs
+
+
+def simulate_neg_log_avg_pass_at_k_from_kumaraswamy_binomial_mle_df(
+    kumaraswamy_binomial_df: pd.DataFrame,
+    columns_to_save: List[str],
+    k_values: Optional[np.ndarray] = None,
+) -> pd.DataFrame:
+    if k_values is None:
+        k_values = np.unique(np.logspace(0, 5, 20, dtype=int))
+
+    simulated_pass_at_k_dfs_list = []
+    for _, row in kumaraswamy_binomial_df.iterrows():
+        integral_values = np.zeros_like(k_values, dtype=np.float64)
+        for k_idx, k in enumerate(k_values):
+            integral_values[
+                k_idx
+            ] = src.analyze.compute_kumaraswamy_three_parameter_distribution_integral(
                 k=k,
                 alpha=row["alpha"],
                 beta=row["beta"],
