@@ -75,7 +75,7 @@ bon_jailbreaking_pass_at_1_beta_fits_df = (
 print("Best-of-N Jailbreaking Discretized Beta Fit: ")
 pprint.pprint(bon_jailbreaking_pass_at_1_beta_fits_df)
 
-bon_jailbreaking_beta_binomial_mle_df = src.analyze.create_or_load_bon_jailbreaking_beta_binomial_mle_df(
+bon_jailbreaking_beta_binomial_mle_df = src.analyze.create_or_load_bon_jailbreaking_text_beta_binomial_mle_df(
     # refresh=False,
     refresh=True,
 )

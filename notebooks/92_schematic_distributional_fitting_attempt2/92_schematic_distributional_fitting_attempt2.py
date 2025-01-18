@@ -119,7 +119,7 @@ integral_values = np.zeros(len(ks_list))
 for k_idx, k in enumerate(ks_list):
     integral_values[
         k_idx
-    ] = src.analyze.compute_beta_three_parameter_distribution_integral(
+    ] = src.analyze.compute_failure_rate_at_k_attempts_under_beta_three_parameter_distribution(
         k=k,
         alpha=alpha,
         beta=beta,

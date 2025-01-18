@@ -172,125 +172,6 @@ def compute_beta_three_parameter_distribution_integrand(
     return result
 
 
-def compute_beta_three_parameter_distribution_integral(
-    k: int, alpha: float, beta: float, scale: float, dps: int = 50
-) -> float:
-    """
-    Compute the integral using mpmath's high-precision integration.
-
-    Here, we want to compute the integral under a scaled Beta distribution:
-    \int_0^{scale} (1 - p)^k p(p; alpha, beta, scale) dp.
-    """
-
-    # Previous fit failed.
-    if np.isnan(alpha) and np.isnan(beta) and np.isnan(scale):
-        return np.nan
-
-    # Parameter validation
-    if not (0.0 < scale <= 1.0 and alpha > 0 and beta > 0):
-        raise ValueError(
-            f"Invalid parameters: alpha: {alpha}, beta: {beta}, scale: {scale}"
-        )
-
-    try:
-        # Precompute constant factors (to avoid repeating in integrand)
-        denom = (scale ** (alpha + beta - 1)) * mpmath.beta(alpha, beta)
-
-        def integrand(p):
-            return (
-                (1.0 - p) ** k * p ** (alpha - 1.0) * (scale - p) ** (beta - 1.0)
-            ) / denom
-
-        integral = mpmath.quad(integrand, [0, scale])
-        if integral < 0.0 or integral >= 1.0:
-            raise ValueError(
-                f"Integral invalid! Integral: {integral}, k: {k}, alpha: {alpha}, beta: {beta}, scale: {scale}"
-            )
-        return float(integral)
-    except (ValueError, TypeError, mpmath.libmp.NoConvergence):
-        return float("nan")
-
-
-def compute_kumaraswamy_binomial_three_parameters_distribution_neg_log_likelihood(
-    params: Tuple[float, float],
-    scale: float,
-    num_samples: np.ndarray,
-    num_successes: np.ndarray,
-) -> float:
-    """
-    3-parameter Beta-Binomial PMF using Gauss hypergeometric function:
-
-    P(X=x) = binom(n, x) * [alpha * beta / c^{alpha}] int_0^c p^{x + alpha - 1} (1 - p)^{n - x} (1 - (o/c)^alpha)^{beta - 1} dp.
-    """
-
-    alpha, beta = params
-    nll_arr = np.zeros_like(num_samples, dtype=np.float64)
-    for idx, (n, x) in enumerate(zip(num_samples, num_successes)):
-        if not (0 <= x <= n):
-            return 0.0
-
-        # binomial coefficient binom(n, x)
-        binom_factor = mpmath.binomial(int(n), int(x))
-
-        # alpha * beta / c^alpha
-        alpha_beta_over_c_to_alpha = alpha * beta / mpmath.power(scale, alpha)
-
-        def integrand(p):
-            return (
-                mpmath.power(p, x + alpha - 1.0)
-                * mpmath.power(1.0 - p, n - x)
-                * mpmath.power(1.0 - mpmath.power(p / scale, alpha), beta - 1.0)
-            )
-
-        integral = mpmath.quad(integrand, [0.0, scale])
-        pmf = binom_factor * alpha_beta_over_c_to_alpha * integral
-        nll = -mpmath.log(pmf)
-        nll_arr[idx] = float(nll)
-
-    avg_nll: float = np.mean(nll_arr)
-    return avg_nll
-
-
-def compute_kumaraswamy_three_parameter_distribution_integral(
-    k: int, alpha: float, beta: float, scale: float
-) -> float:
-    """
-    Compute the integral using mpquad's high-precision integration.
-
-    Here, we want to compute the integral under a scaled Kumaraswamy distribution:
-    \int_0^{scale} (1 - p)^k p(p; alpha, beta, scale) dp.
-    """
-    # Previous fit failed.
-    if np.isnan(alpha) and np.isnan(beta) and np.isnan(scale):
-        return np.nan
-
-    # Parameter validation
-    if not (0.0 < scale <= 1.0 and alpha > 0 and beta > 0):
-        raise ValueError(
-            f"Invalid parameters: alpha: {alpha}, beta: {beta}, scale: {scale}"
-        )
-
-    try:
-        # Precompute constant factors (to avoid repeating in integrand)
-        denom = mpmath.power(scale, alpha) / alpha / beta
-
-        def integrand(p):
-            return (
-                mpmath.power(1.0 - p, k)
-                * mpmath.power(p, alpha - 1.0)
-                * mpmath.power(1.0 - mpmath.power(p / scale, alpha), beta - 1.0)
-            ) / denom
-
-        integral = mpmath.quad(integrand, [0, scale])
-        if integral < 0.0 or integral >= 1.0:
-            raise ValueError(
-                f"Integral invalid! Integral: {integral}, k: {k}, alpha: {alpha}, beta: {beta}, scale: {scale}"
-            )
-        return float(integral)
-    except (ValueError, TypeError, mpmath.libmp.NoConvergence):
-        return float("nan")
-
-
 def compute_discretized_neg_log_likelihood(
     params: Tuple[float, float],
     data: np.ndarray,
@@ -359,6 +240,125 @@ def compute_discretized_neg_log_likelihood(
     return neg_discretized_log_likelihood
 
 
+def compute_failure_rate_at_k_attempts_under_beta_three_parameter_distribution(
+    k: int, alpha: float, beta: float, scale: float, dps: int = 50
+) -> float:
+    """
+    Compute the integral using mpmath's high-precision integration.
+
+    Here, we want to compute the integral under a scaled Beta distribution:
+    \int_0^{scale} (1 - p)^k p(p; alpha, beta, scale) dp.
+    """
+
+    # Previous fit failed.
+    if np.isnan(alpha) and np.isnan(beta) and np.isnan(scale):
+        return np.nan
+
+    # Parameter validation
+    if not (0.0 < scale <= 1.0 and alpha > 0 and beta > 0):
+        raise ValueError(
+            f"Invalid parameters: alpha: {alpha}, beta: {beta}, scale: {scale}"
+        )
+
+    try:
+        # Precompute constant factors (to avoid repeating in integrand)
+        denom = (scale ** (alpha + beta - 1)) * mpmath.beta(alpha, beta)
+
+        def integrand(p):
+            return (
+                (1.0 - p) ** k * p ** (alpha - 1.0) * (scale - p) ** (beta - 1.0)
+            ) / denom
+
+        integral = mpmath.quad(integrand, [0, scale])
+        if integral < 0.0 or integral >= 1.0:
+            raise ValueError(
+                f"Integral invalid! Integral: {integral}, k: {k}, alpha: {alpha}, beta: {beta}, scale: {scale}"
+            )
+        return float(integral)
+    except (ValueError, TypeError, mpmath.libmp.NoConvergence):
+        return float("nan")
+
+
+def compute_failure_rate_at_k_attempts_under_kumaraswamy_three_parameter_distribution(
+    k: int, alpha: float, beta: float, scale: float
+) -> float:
+    """
+    Compute the integral using mpquad's high-precision integration.
+
+    Here, we want to compute the integral under a scaled Kumaraswamy distribution:
+    \int_0^{scale} (1 - p)^k p(p; alpha, beta, scale) dp.
+    """
+    # Previous fit failed.
+    if np.isnan(alpha) and np.isnan(beta) and np.isnan(scale):
+        return np.nan
+
+    # Parameter validation
+    if not (0.0 < scale <= 1.0 and alpha > 0 and beta > 0):
+        raise ValueError(
+            f"Invalid parameters: alpha: {alpha}, beta: {beta}, scale: {scale}"
+        )
+
+    try:
+        # Precompute constant factors (to avoid repeating in integrand)
+        denom = mpmath.power(scale, alpha) / alpha / beta
+
+        def integrand(p):
+            return (
+                mpmath.power(1.0 - p, k)
+                * mpmath.power(p, alpha - 1.0)
+                * mpmath.power(1.0 - mpmath.power(p / scale, alpha), beta - 1.0)
+            ) / denom
+
+        integral = mpmath.quad(integrand, [0, scale])
+        if integral < 0.0 or integral >= 1.0:
+            raise ValueError(
+                f"Integral invalid! Integral: {integral}, k: {k}, alpha: {alpha}, beta: {beta}, scale: {scale}"
+            )
+        return float(integral)
+    except (ValueError, TypeError, mpmath.libmp.NoConvergence):
+        return float("nan")
+
+
+def compute_kumaraswamy_binomial_three_parameters_distribution_neg_log_likelihood(
+    params: Tuple[float, float],
+    scale: float,
+    num_samples: np.ndarray,
+    num_successes: np.ndarray,
+) -> float:
+    """
+    3-parameter Beta-Binomial PMF using Gauss hypergeometric function:
+
+    P(X=x) = binom(n, x) * [alpha * beta / c^{alpha}] int_0^c p^{x + alpha - 1} (1 - p)^{n - x} (1 - (o/c)^alpha)^{beta - 1} dp.
+    """
+
+    alpha, beta = params
+    nll_arr = np.zeros_like(num_samples, dtype=np.float64)
+    for idx, (num_sample, num_success) in enumerate(zip(num_samples, num_successes)):
+        if not (0 <= num_success <= num_sample):
+            return 0.0
+
+        # binomial coefficient binom(n, x)
+        binom_factor = mpmath.binomial(int(num_sample), int(num_success))
+
+        # alpha * beta / c^alpha
+        alpha_beta_over_c_to_alpha = alpha * beta / mpmath.power(scale, alpha)
+
+        def integrand(p):
+            return (
+                mpmath.power(p, num_success + alpha - 1.0)
+                * mpmath.power(1.0 - p, num_sample - num_success)
+                * mpmath.power(1.0 - mpmath.power(p / scale, alpha), beta - 1.0)
+            )
+
+        integral = mpmath.quad(integrand, [0.0, scale])
+        pmf = binom_factor * alpha_beta_over_c_to_alpha * integral
+        nll = -mpmath.log(pmf)
+        nll_arr[idx] = float(nll)
+
+    avg_nll: float = np.mean(nll_arr)
+    return avg_nll
+
+
 def compute_pass_at_k_from_individual_outcomes(
     individual_outcomes_per_problem: np.ndarray,
     ks_list: List[int],
@@ -420,7 +420,7 @@ def compute_scaling_exponent_from_distributional_fit(
 
     if distribution == "beta_two_parameter":
         raise NotImplementedError
-    elif distribution == "beta_three_parameter":
+    elif distribution in {"beta_three_parameter", "kumaraswamy_three_parameter"}:
         distributional_fit_df["Log Power Law Prefactor"] = np.nan
         distributional_fit_df["Power Law Prefactor"] = np.nan
         distributional_fit_df["Power Law Exponent"] = np.nan
@@ -429,7 +429,7 @@ def compute_scaling_exponent_from_distributional_fit(
             for k_idx, k in enumerate(k_values):
                 integral_values[
                     k_idx
-                ] = compute_beta_three_parameter_distribution_integral(
+                ] = compute_failure_rate_at_k_attempts_under_beta_three_parameter_distribution(
                     k=k,
                     alpha=distributional_fit_df["alpha"].values[row_idx],
                     beta=distributional_fit_df["beta"].values[row_idx],
@@ -573,7 +573,7 @@ def create_or_load_beta_distributions_pdf_df(
     return beta_distributions_pdf_df
 
 
-def create_or_load_bon_jailbreaking_beta_binomial_mle_df(
+def create_or_load_bon_jailbreaking_text_beta_binomial_mle_df(
     raw_data_dir=f"{os.getcwd()}/data/raw_data",
     processed_data_dir=f"{os.getcwd()}/data/processed_data",
     refresh: bool = False,
@@ -861,6 +861,70 @@ def create_or_load_bon_jailbreaking_text_individual_outcomes_df(
     )
 
     return bon_jailbreaking_individual_outcomes_df
+
+
+def create_or_load_bon_jailbreaking_text_kumaraswamy_binomial_mle_df(
+    raw_data_dir=f"{os.getcwd()}/data/raw_data",
+    processed_data_dir=f"{os.getcwd()}/data/processed_data",
+    refresh: bool = False,
+):
+    bon_jailbreaking_text_kumaraswamy_binomial_mle_df_path = os.path.join(
+        processed_data_dir,
+        "bon_jailbreaking_kumaraswamy_binomial_mle.parquet",
+    )
+    if refresh or not os.path.exists(
+        bon_jailbreaking_text_kumaraswamy_binomial_mle_df_path
+    ):
+        print(
+            f"Creating {bon_jailbreaking_text_kumaraswamy_binomial_mle_df_path} anew..."
+        )
+        bon_jailbreaking_text_individual_outcomes_df = src.analyze.create_or_load_bon_jailbreaking_text_individual_outcomes_df(
+            refresh=False,
+            # refresh=True,
+        )
+        bon_jailbreaking_text_num_samples_and_num_successes_df = (
+            src.analyze.convert_individual_outcomes_to_num_samples_and_num_successes_df(
+                individual_outcomes_df=bon_jailbreaking_text_individual_outcomes_df,
+                groupby_cols=src.globals.BON_JAILBREAKING_GROUPBY_COLS
+                + ["Problem Idx"],
+            )
+        )
+
+        bon_jailbreaking_text_kumaraswamy_binomial_mle_df = (
+            bon_jailbreaking_text_num_samples_and_num_successes_df.groupby(
+                src.globals.BON_JAILBREAKING_GROUPBY_COLS
+            )
+            .apply(
+                lambda df: src.analyze.fit_kumaraswamy_binomial_three_parameters_to_num_samples_and_num_successes(
+                    num_samples_and_num_successes_df=df
+                )
+            )
+            .reset_index()
+        )
+
+        # Add scaling exponent numerically.
+        bon_jailbreaking_text_kumaraswamy_binomial_mle_df = (
+            src.analyze.compute_scaling_exponent_from_distributional_fit(
+                distributional_fit_df=bon_jailbreaking_text_kumaraswamy_binomial_mle_df,
+                distribution="kumaraswamy_three_parameter",
+            )
+        )
+
+        bon_jailbreaking_text_kumaraswamy_binomial_mle_df.to_parquet(
+            bon_jailbreaking_text_kumaraswamy_binomial_mle_df_path,
+            index=False,
+        )
+
+        del bon_jailbreaking_text_kumaraswamy_binomial_mle_df
+
+    bon_jailbreaking_text_kumaraswamy_binomial_mle_df = pd.read_parquet(
+        bon_jailbreaking_text_kumaraswamy_binomial_mle_df_path
+    )
+    print(
+        f"Loaded {bon_jailbreaking_text_kumaraswamy_binomial_mle_df_path} with shape: ",
+        bon_jailbreaking_text_kumaraswamy_binomial_mle_df.shape,
+    )
+    return bon_jailbreaking_text_kumaraswamy_binomial_mle_df
 
 
 def create_or_load_bon_jailbreaking_text_pass_at_k_df(
@@ -3128,7 +3192,7 @@ def simulate_neg_log_avg_pass_at_k_from_beta_binomial_mle_df(
         for k_idx, k in enumerate(k_values):
             integral_values[
                 k_idx
-            ] = src.analyze.compute_beta_three_parameter_distribution_integral(
+            ] = src.analyze.compute_failure_rate_at_k_attempts_under_beta_three_parameter_distribution(
                 k=k,
                 alpha=row["alpha"],
                 beta=row["beta"],
@@ -3159,7 +3223,7 @@ def simulate_neg_log_avg_pass_at_k_from_beta_negative_binomial_mle_df(
         for k_idx, k in enumerate(k_values):
             integral_values[
                 k_idx
-            ] = src.analyze.compute_beta_three_parameter_distribution_integral(
+            ] = src.analyze.compute_failure_rate_at_k_attempts_under_beta_three_parameter_distribution(
                 k=k,
                 alpha=row["alpha"],
                 beta=row["beta"],
@@ -3190,7 +3254,7 @@ def simulate_neg_log_avg_pass_at_k_from_kumaraswamy_binomial_mle_df(
         for k_idx, k in enumerate(k_values):
             integral_values[
                 k_idx
-            ] = src.analyze.compute_kumaraswamy_three_parameter_distribution_integral(
+            ] = src.analyze.compute_failure_rate_at_k_attempts_under_kumaraswamy_three_parameter_distribution(
                 k=k,
                 alpha=row["alpha"],
                 beta=row["beta"],
