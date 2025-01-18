@@ -322,14 +322,14 @@ g.set(
     xlabel="Scaling Parameter",
     yscale="log",
     ylabel="Neg Log Score",
-    ylim=(1e-1, None),
+    ylim=(3e-2, 8e0),
 )
 sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
     plot_filename="bon_jailbreaking_y=neg_log_score_x=scaling_parameter_hue=model_style=real_or_syn_kumaraswamy_binomial",
 )
-plt.show()
+# plt.show()
 
 
 bon_jailbreaking_text_joint_power_law_and_kumaraswamy_binomial_distr_fit_df = pd.merge(
