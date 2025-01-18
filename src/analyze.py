@@ -211,6 +211,46 @@ def compute_beta_three_parameter_distribution_integral(
         return float("nan")
 
 
+def compute_kumaraswamy_binomial_three_parameters_distribution_neg_log_likelihood(
+    params: Tuple[float, float],
+    scale: float,
+    num_samples: np.ndarray,
+    num_successes: np.ndarray,
+) -> float:
+    """
+    3-parameter Beta-Binomial PMF using Gauss hypergeometric function:
+
+    P(X=x) = binom(n, x) * [alpha * beta / c^{alpha}] int_0^c p^{x + alpha - 1} (1 - p)^{n - x} (1 - (o/c)^alpha)^{beta - 1} dp.
+    """
+
+    alpha, beta = params
+    nll_arr = np.zeros_like(num_samples, dtype=np.float64)
+    for idx, (n, x) in enumerate(zip(num_samples, num_successes)):
+        if not (0 <= x <= n):
+            return 0.0
+
+        # binomial coefficient binom(n, x)
+        binom_factor = mpmath.binomial(int(n), int(x))
+
+        # alpha * beta / c^alpha
+        alpha_beta_over_c_to_alpha = alpha * beta / mpmath.power(scale, alpha)
+
+        def integrand(p):
+            return (
+                mpmath.power(p, x + alpha - 1.0)
+                * mpmath.power(1.0 - p, n - x)
+                * mpmath.power(1.0 - mpmath.power(p / scale, alpha), beta - 1.0)
+            )
+
+        integral = mpmath.quad(integrand, [0.0, scale])
+        pmf = binom_factor * alpha_beta_over_c_to_alpha * integral
+        nll = -mpmath.log(pmf)
+        nll_arr[idx] = float(nll)
+
+    avg_nll: float = np.mean(nll_arr)
+    return avg_nll
+
+
 def compute_kumaraswamy_three_parameter_distribution_integral(
     k: int, alpha: float, beta: float, scale: float
 ) -> float:
@@ -238,7 +278,7 @@ def compute_kumaraswamy_three_parameter_distribution_integral(
             return (
                 mpmath.power(1.0 - p, k)
                 * mpmath.power(p, alpha - 1.0)
-                * mpmath.power(1 - mpmath.power(p / scale, alpha), beta - 1.0)
+                * mpmath.power(1.0 - mpmath.power(p / scale, alpha), beta - 1.0)
             ) / denom
 
         integral = mpmath.quad(integrand, [0, scale])
@@ -1601,6 +1641,66 @@ def create_or_load_large_language_monkeys_pythia_math_beta_binomial_mle_df(
     return large_language_monkeys_pythia_math_beta_binomial_mle_df
 
 
+def create_or_load_large_language_monkeys_pythia_math_kumaraswamy_binomial_mle_df(
+    raw_data_dir=f"{os.getcwd()}/data/raw_data",
+    processed_data_dir=f"{os.getcwd()}/data/processed_data",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    large_language_monkeys_pythia_math_kumaraswamy_binomial_mle_df_path = os.path.join(
+        processed_data_dir,
+        "large_language_monkeys_pythia_math_kumaraswamy_binomial_mle.parquet",
+    )
+    if refresh or not os.path.exists(
+        large_language_monkeys_pythia_math_kumaraswamy_binomial_mle_df_path
+    ):
+        print(
+            f"Creating {large_language_monkeys_pythia_math_kumaraswamy_binomial_mle_df_path} anew..."
+        )
+        llmonkeys_groupby_cols = ["Model", "Benchmark"]
+        llmonkeys_individual_outcomes_df = src.analyze.create_or_load_large_language_monkeys_pythia_math_individual_outcomes_df(
+            refresh=False,
+            # refresh=True,
+        )
+        llmonkeys_num_samples_and_num_successes_df = (
+            src.analyze.convert_individual_outcomes_to_num_samples_and_num_successes_df(
+                individual_outcomes_df=llmonkeys_individual_outcomes_df,
+                groupby_cols=llmonkeys_groupby_cols + ["Problem Idx"],
+            )
+        )
+
+        large_language_monkeys_pythia_math_kumaraswamy_binomial_mle_df = (
+            llmonkeys_num_samples_and_num_successes_df.groupby(llmonkeys_groupby_cols)
+            .apply(
+                lambda df: src.analyze.fit_kumaraswamy_binomial_three_parameters_to_num_samples_and_num_successes(
+                    num_samples_and_num_successes_df=df
+                )
+            )
+            .reset_index()
+        )
+
+        # Add scaling exponent numerically.
+        large_language_monkeys_pythia_math_kumaraswamy_binomial_mle_df = src.analyze.compute_scaling_exponent_from_distributional_fit(
+            distributional_fit_df=large_language_monkeys_pythia_math_kumaraswamy_binomial_mle_df,
+            distribution="kumaraswamy_three_parameter",
+        )
+
+        large_language_monkeys_pythia_math_kumaraswamy_binomial_mle_df.to_parquet(
+            large_language_monkeys_pythia_math_kumaraswamy_binomial_mle_df_path,
+            index=False,
+        )
+
+        del large_language_monkeys_pythia_math_kumaraswamy_binomial_mle_df
+
+    large_language_monkeys_pythia_math_kumaraswamy_binomial_mle_df = pd.read_parquet(
+        large_language_monkeys_pythia_math_kumaraswamy_binomial_mle_df_path
+    )
+    print(
+        f"Loaded {large_language_monkeys_pythia_math_kumaraswamy_binomial_mle_df_path} with shape: ",
+        large_language_monkeys_pythia_math_kumaraswamy_binomial_mle_df.shape,
+    )
+    return large_language_monkeys_pythia_math_kumaraswamy_binomial_mle_df
+
+
 def create_or_load_large_language_monkeys_pythia_math_individual_outcomes_df(
     raw_data_dir=f"{os.getcwd()}/data/raw_data",
     processed_data_dir=f"{os.getcwd()}/data/processed_data",
@@ -2547,6 +2647,93 @@ def fit_beta_negative_binomial_three_parameters_to_num_samples_and_num_successes
     # try:
     optimize_result = scipy.optimize.minimize(
         lambda params: compute_beta_binomial_three_parameters_distribution_neg_log_likelihood(
+            params,
+            scale=scale,
+            num_samples=num_samples,
+            num_successes=num_successes,
+        ),
+        x0=initial_params,
+        bounds=bounds,
+        method="L-BFGS-B",
+        options=dict(
+            maxiter=maxiter,
+            maxls=200,
+            gtol=1e-4,  # Gradient tolerance, adjust as needed),
+            ftol=1e-4,
+        ),
+    )
+    alpha = optimize_result.x[0]
+    beta = optimize_result.x[1]
+    neg_log_likelihood = optimize_result.fun
+
+    result = pd.Series(
+        {
+            "alpha": alpha,
+            "beta": beta,
+            "loc": 0.0,
+            "scale": scale,
+            "neg_log_likelihood": neg_log_likelihood,
+            "maxiter": maxiter,
+            "success": "Success" if optimize_result.success else "Failure",
+        }
+    )
+    return result
+
+
+def fit_kumaraswamy_binomial_three_parameters_to_num_samples_and_num_successes(
+    num_samples_and_num_successes_df: pd.DataFrame,
+    maxiter: int = 25,
+    # epsilon: Optional[float] = None,
+    epsilon: Optional[float] = 1e-6,
+) -> pd.Series:
+    num_data = len(num_samples_and_num_successes_df)
+    num_samples = num_samples_and_num_successes_df["Num. Samples Total"].values
+    num_successes = num_samples_and_num_successes_df["Num. Samples Correct"].values
+    if np.all(num_successes == 0):
+        result = pd.Series(
+            {
+                "alpha": np.nan,
+                "beta": np.nan,
+                "loc": np.nan,
+                "scale": np.nan,
+                "neg_log_likelihood": np.nan,
+                "maxiter": maxiter,
+                "success": "Failure (Num Successes All Zeros)",
+            }
+        )
+        return result
+
+    fraction_successes = np.divide(num_successes, num_samples)
+    largest_fraction_successes = np.max(fraction_successes)
+    # Compute scale as (n+1) * max(fraction_successes) / n.
+    # We inflate the scale to correct for bias; is this correct?
+    # I think we actually want to divide by the expected value of the maximum of
+    # n i.i.d. Beta(alpha, beta) random variables. But this doesn't appear to exist
+    # in close form or even numerically?
+    # TODO(rylan): Investigate this further.
+    scale = (num_data + 1.0) * largest_fraction_successes / num_data
+    # Make sure that scale isn't more than 1.0 + epsilon.
+    scale = min(scale, 1.0)
+
+    # Start with reasonable initial alpha, beta.
+    alpha, beta, _, _ = scipy.stats.beta.fit(
+        np.clip(
+            fraction_successes, epsilon, 1.0 - epsilon
+        ),  # Make sure that we remain in [0., 1.]
+        floc=0.0,
+        fscale=scale,  # Force the scale to be the max scale.
+    )
+    initial_params = (alpha, beta)
+    # Create extremely generous bounds for alpha, beta.
+    bounds = [
+        (0.01, 100),
+        (0.01, 100),
+    ]
+
+    # Fit alpha, beta, scale to the scaled beta binomial
+    # try:
+    optimize_result = scipy.optimize.minimize(
+        lambda params: compute_kumaraswamy_binomial_three_parameters_distribution_neg_log_likelihood(
             params,
             scale=scale,
             num_samples=num_samples,

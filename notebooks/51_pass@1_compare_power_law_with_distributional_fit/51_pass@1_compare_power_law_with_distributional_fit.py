@@ -50,6 +50,13 @@ print("Large Language Monkeys Least Squares Fit: ")
 pprint.pprint(llmonkeys_lst_sqrs_fitted_power_law_parameters_df)
 
 
+llmonkeys_pythia_math_kumaraswamy_binomial_mle_df = src.analyze.create_or_load_large_language_monkeys_pythia_math_kumaraswamy_binomial_mle_df(
+    refresh=False,
+    # refresh=True,
+)
+print("Large Language Monkeys ScaledKumaraswamy-Binomial 3-Parameter Fit: ")
+pprint.pprint(llmonkeys_pythia_math_kumaraswamy_binomial_mle_df)
+
 llmonkeys_pythia_math_beta_binomial_mle_df = src.analyze.create_or_load_large_language_monkeys_pythia_math_beta_binomial_mle_df(
     refresh=False,
     # refresh=True,
