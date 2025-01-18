@@ -44,13 +44,13 @@ bon_jailbreaking_pass_at_1_df = bon_jailbreaking_pass_at_k_df[
 bon_jailbreaking_pass_at_1_kumaraswamy_fits_df = (
     bon_jailbreaking_pass_at_1_df.groupby(["Model", "Modality", "Scaling Parameter"])
     .apply(
-        lambda df: src.analyze.fit_pass_at_1_kumaraswamy_distribution_parameters(
+        lambda df: src.analyze.fit_pass_at_1_discretized_kumaraswamy_distribution_parameters(
             pass_i_at_1_data=df["Score"].values
         )
     )
     .reset_index()
 )
-print("Best-of-N Jailbreaking Kumaraswamy Fit: ")
+print("Best-of-N Jailbreaking Discretized Kumaraswamy Fit: ")
 pprint.pprint(bon_jailbreaking_pass_at_1_kumaraswamy_fits_df)
 
 
@@ -66,15 +66,21 @@ pprint.pprint(bon_jailbreaking_pass_at_1_kumaraswamy_fits_df)
 bon_jailbreaking_pass_at_1_beta_fits_df = (
     bon_jailbreaking_pass_at_1_df.groupby(["Model", "Modality", "Scaling Parameter"])
     .apply(
-        lambda df: src.analyze.fit_pass_at_1_beta_distribution_parameters(
+        lambda df: src.analyze.fit_pass_at_1_discretized_beta_distribution_parameters(
             data=df["Score"].values
         )
     )
     .reset_index()
 )
-print("Best-of-N Jailbreaking Beta Fit: ")
+print("Best-of-N Jailbreaking Discretized Beta Fit: ")
 pprint.pprint(bon_jailbreaking_pass_at_1_beta_fits_df)
 
+bon_jailbreaking_beta_binomial_mle_df = src.analyze.create_or_load_bon_jailbreaking_beta_binomial_mle_df(
+    # refresh=False,
+    refresh=True,
+)
+print("Best-of-N Jailbreaking ScaledBeta-Binomial 3-Parameter Fit: ")
+pprint.pprint(bon_jailbreaking_beta_binomial_mle_df)
 
 plt.close()
 plt.figure(figsize=(10, 6))
@@ -99,7 +105,7 @@ src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
     plot_filename="bon_jailbreaking_y=beta_hat_x=alpha_hat_hue=model_style=benchmark",
 )
-plt.show()
+# plt.show()
 
 
 # Create better bins that handle zero and near-zero values
@@ -130,8 +136,8 @@ g = sns.displot(
 )
 # Add the fit Beta distributions.
 for ax_idx, model_name in enumerate(src.globals.BON_JAILBREAKING_TEXT_MODELS_ORDER):
-    model_df = bon_jailbreaking_pass_at_1_beta_fits_df[
-        bon_jailbreaking_pass_at_1_beta_fits_df["Model"] == model_name
+    model_df = bon_jailbreaking_beta_binomial_mle_df[
+        bon_jailbreaking_beta_binomial_mle_df["Model"] == model_name
     ]
     pass_at_1 = np.logspace(-5, np.log10(model_df["scale"]).values[0], 500)
     cdf = scipy.stats.beta.cdf(
@@ -151,7 +157,7 @@ for ax_idx, model_name in enumerate(src.globals.BON_JAILBREAKING_TEXT_MODELS_ORD
 g.set(
     xscale="log",
     xlabel="pass@1",
-    yscale="log",
+    # yscale="log",
     ylabel="Count",
     ylim=(0, 100),
 )
@@ -164,7 +170,7 @@ src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
     plot_filename="bon_jailbreaking_y=counts_x=score_hue=model_col=model_bins=custom",
 )
-plt.show()
+# plt.show()
 
 
 # Load the original LLMonkeys pass@k data on MATH.
@@ -184,7 +190,7 @@ llmonkeys_original_pass_at_1_df = llmonkeys_original_pass_at_k_df[
 llmonkeys_pass_at_1_kumaraswamy_fits_df = (
     llmonkeys_original_pass_at_1_df.groupby(["Model", "Benchmark", "Scaling Parameter"])
     .apply(
-        lambda df: src.analyze.fit_pass_at_1_kumaraswamy_distribution_parameters(
+        lambda df: src.analyze.fit_pass_at_1_discretized_kumaraswamy_distribution_parameters(
             pass_i_at_1_data=df["Score"].values
         )
     )
@@ -202,22 +208,31 @@ pprint.pprint(llmonkeys_pass_at_1_kumaraswamy_fits_df)
 # 4  Pythia 2.8B      MATH                  1  0.224330  3.036977  0.0  0.3153
 # 5  Pythia 6.9B      MATH                  1  0.241094  2.710055  0.0  0.2428
 # 6   Pythia 12B      MATH                  1  0.254311  2.014420  0.0  0.2328
-llmonkeys_pass_at_1_beta_fits_df = (
+llmonkeys_pass_at_1_discretized_beta_fits_df = (
     llmonkeys_original_pass_at_1_df.groupby(["Model", "Benchmark", "Scaling Parameter"])
     .apply(
-        lambda df: src.analyze.fit_pass_at_1_beta_distribution_parameters(
+        lambda df: src.analyze.fit_pass_at_1_discretized_beta_distribution_parameters(
             data=df["Score"].values
         )
     )
     .reset_index()
 )
-print("Large Language Monkey Beta Fit: ")
-pprint.pprint(llmonkeys_pass_at_1_beta_fits_df)
+print("Large Language Monkey Discretized Beta Fit: ")
+pprint.pprint(llmonkeys_pass_at_1_discretized_beta_fits_df)
+
+# Load the large language monkeys scaled Beta-Binomial 3-parameter MLE fit.
+llmonkeys_pythia_math_beta_binomial_mle_df = src.analyze.create_or_load_large_language_monkeys_pythia_math_beta_binomial_mle_df(
+    refresh=False,
+    # refresh=True,
+)
+print("Large Language Monkeys ScaledBeta-Binomial 3-Parameter Fit: ")
+pprint.pprint(llmonkeys_pythia_math_beta_binomial_mle_df)
+
 
 plt.close()
 plt.figure(figsize=(10, 6))
 g = sns.scatterplot(
-    data=llmonkeys_pass_at_1_beta_fits_df,
+    data=llmonkeys_pythia_math_beta_binomial_mle_df,
     x="alpha",
     y="beta",
     hue="Model",
@@ -237,7 +252,7 @@ src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
     plot_filename="llmonkey_y=beta_hat_x=alpha_hat_hue=model_style=benchmark",
 )
-plt.show()
+# plt.show()
 
 # Create better bins that handle zero and near-zero values
 smallest_nonzero_pass_at_1 = llmonkeys_original_pass_at_1_df[
@@ -269,8 +284,8 @@ g = sns.displot(
 for ax_idx, model_name in enumerate(
     src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER
 ):
-    model_df = llmonkeys_pass_at_1_beta_fits_df[
-        llmonkeys_pass_at_1_beta_fits_df["Model"] == model_name
+    model_df = llmonkeys_pythia_math_beta_binomial_mle_df[
+        llmonkeys_pythia_math_beta_binomial_mle_df["Model"] == model_name
     ]
     pass_at_1 = np.logspace(-5, np.log10(model_df["scale"]).values[0], 500)
     cdf = scipy.stats.beta.cdf(
@@ -302,7 +317,7 @@ src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
     plot_filename="llmonkey_y=counts_x=score_hue=model_col=model_bins=custom",
 )
-plt.show()
+# plt.show()
 
 
 print("Finished notebooks/50_pass@1_fits.py!")
