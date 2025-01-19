@@ -364,8 +364,12 @@ def compute_pass_at_k_from_individual_outcomes(
     ks_list: List[int],
 ) -> pd.DataFrame:
     num_problems, num_samples_per_problem = individual_outcomes_per_problem.shape
-    num_samples_total = np.full(num_problems, fill_value=num_samples_per_problem)
-    num_samples_correct = individual_outcomes_per_problem.sum(axis=1)
+    # Compute the number of samples per problem and the number of successes per problem.
+    # Note: For BoN jailbreaking, due to their sampling procedure, the number of samples per problem is
+    # not constant and the individual_outcomes_per_problem will have many NaNs.
+    # This code is written to take this into account.
+    num_samples_total = np.sum(~np.isnan(individual_outcomes_per_problem), axis=1)
+    num_samples_correct = np.nansum(individual_outcomes_per_problem, axis=1)
     num_samples_and_num_successes_df = pd.DataFrame.from_dict(
         {
             "Num. Samples Total": num_samples_total,
@@ -1145,6 +1149,80 @@ def create_or_load_bon_jailbreaking_vision_pass_at_k_df(
         bon_jailbreaking_vision_pass_at_k_df.shape,
     )
     return bon_jailbreaking_vision_pass_at_k_df
+
+
+def create_or_load_cross_validated_bon_jailbreaking_text_scaling_coefficient_data_df(
+    raw_data_dir=f"{os.getcwd()}/data/raw_data",
+    processed_data_dir=f"{os.getcwd()}/data/processed_data",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    cv_bon_jailbreaking_text_scaling_coefficient_df_path = os.path.join(
+        processed_data_dir,
+        "cv_bon_jailbreaking_text_scaling_coefficient.parquet",
+    )
+
+    if refresh or not os.path.exists(
+        cv_bon_jailbreaking_text_scaling_coefficient_df_path
+    ):
+        print(
+            f"Creating {cv_bon_jailbreaking_text_scaling_coefficient_df_path} anew..."
+        )
+        os.makedirs(processed_data_dir, exist_ok=True)
+
+        # Load the individual outcomes per problem.
+        individual_outcomes_per_problem_df = (
+            create_or_load_bon_jailbreaking_text_individual_outcomes_df(refresh=False)
+        )
+
+        def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_wrapper(
+            model: str, modality: str, temperature: float, subset_df: pd.DataFrame
+        ):
+            result_df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
+                individual_outcomes_per_problem_df=subset_df,
+            )
+            result_df["Model"] = model
+            result_df["Modality"] = modality
+            result_df["Temperature"] = temperature
+            return result_df
+
+        cv_bon_jailbreaking_text_scaling_coefficient_dfs_list = []
+        for (
+            model,
+            modality,
+            temperature,
+        ), subset_df in individual_outcomes_per_problem_df.groupby(
+            src.globals.BON_JAILBREAKING_GROUPBY_COLS
+        ):
+            print(
+                f"Processing model: {model}, modality: {modality}, temperature: {temperature}"
+            )
+            df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes_wrapper(
+                model=model,
+                modality=modality,
+                temperature=temperature,
+                subset_df=subset_df,
+            )
+            cv_bon_jailbreaking_text_scaling_coefficient_dfs_list.append(df)
+
+        cv_bon_jailbreaking_text_scaling_coefficient_df = pd.concat(
+            cv_bon_jailbreaking_text_scaling_coefficient_dfs_list,
+            ignore_index=True,
+        ).reset_index(drop=True)
+
+        cv_bon_jailbreaking_text_scaling_coefficient_df.to_parquet(
+            path=cv_bon_jailbreaking_text_scaling_coefficient_df_path
+        )
+        del cv_bon_jailbreaking_text_scaling_coefficient_df
+
+    cv_bon_jailbreaking_text_scaling_coefficient_df = pd.read_parquet(
+        cv_bon_jailbreaking_text_scaling_coefficient_df_path
+    )
+
+    print(
+        f"Loaded {cv_bon_jailbreaking_text_scaling_coefficient_df_path} with shape: ",
+        cv_bon_jailbreaking_text_scaling_coefficient_df.shape,
+    )
+    return cv_bon_jailbreaking_text_scaling_coefficient_df
 
 
 def create_or_load_cross_validated_large_language_monkey_pythia_math_scaling_coefficient_data_df(
@@ -2271,7 +2349,7 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
         ).astype(int)
     ).tolist()
 
-    # Step 1: Compute the "true" power law exponent using least-squares fitting on all the data.
+    # Step 1: Compute the "true" power law exponent using least squares fitting on all the data.
     pass_at_k_df = src.analyze.compute_pass_at_k_from_individual_outcomes(
         individual_outcomes_per_problem=individual_outcomes_per_problem,
         ks_list=ks_list,

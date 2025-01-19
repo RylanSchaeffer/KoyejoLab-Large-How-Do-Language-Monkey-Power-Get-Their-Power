@@ -19,9 +19,13 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
     refresh=False,
 )
 
+bon_jailbreaking_text_cross_validated_scaling_coeff_df = src.analyze.create_or_load_cross_validated_bon_jailbreaking_text_scaling_coefficient_data_df(
+    refresh=False,
+    # refresh=True,
+)
 
 # Load backtested scaling coefficient fits.
-llmonkeys_cross_validated_scaling_coeff_df = src.analyze.create_or_load_cross_validated_large_language_monkey_pythia_math_scaling_coefficient_data_df(
+llmonkeys_pythia_math_cross_validated_scaling_coeff_df = src.analyze.create_or_load_cross_validated_large_language_monkey_pythia_math_scaling_coefficient_data_df(
     refresh=False,
     # refresh=True,
 )
@@ -29,7 +33,7 @@ llmonkeys_cross_validated_scaling_coeff_df = src.analyze.create_or_load_cross_va
 # Convert the scaling parameters to forecasts.
 ks_list = np.unique(np.logspace(0, 5, 100).astype(int))
 predicted_power_law_curves_dfs_list = []
-for row_idx, row in llmonkeys_cross_validated_scaling_coeff_df.iterrows():
+for row_idx, row in llmonkeys_pythia_math_cross_validated_scaling_coeff_df.iterrows():
     df = pd.DataFrame.from_dict(
         {
             "Scaling Parameter": ks_list,
@@ -87,13 +91,13 @@ for row_idx in range(g.axes.shape[0]):
 sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
-    plot_filename="y=neg_log_score_x=scaling_parameter_hue=model_col=num_samples_per_problem_row=num_problems_style=fit_method",
+    plot_filename="y=neg_log_avg_score_x=scaling_parameter_hue=model_col=model_row=num_samples_per_problem_style=fit_method",
 )
-plt.show()
+# plt.show()
 
 plt.close()
 g = sns.relplot(
-    data=llmonkeys_cross_validated_scaling_coeff_df,
+    data=llmonkeys_pythia_math_cross_validated_scaling_coeff_df,
     kind="line",
     x="Num. Samples per Problem",
     y="Fit Power Law Exponent",
@@ -119,10 +123,10 @@ src.plot.save_plot_with_multiple_extensions(
 # plt.show()
 
 
-# Load the actual pass_D@k data to overlay.
-llmonkeys_pythia_math_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_pythia_math_pass_at_k_df(
-    refresh=False,
-    # refresh=True,
-)
+# # Load the actual pass_D@k data to overlay.
+# llmonkeys_pythia_math_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_pythia_math_pass_at_k_df(
+#     refresh=False,
+#     # refresh=True,
+# )
 
-plt.close()
+# plt.close()
