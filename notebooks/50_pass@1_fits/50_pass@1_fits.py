@@ -156,7 +156,7 @@ for ax_idx, model_name in enumerate(src.globals.BON_JAILBREAKING_TEXT_MODELS_ORD
     )
 g.set(
     xscale="log",
-    xlabel="pass@1",
+    xlabel=r"$\operatorname{pass_i@1}$",
     # yscale="log",
     ylabel="Count",
     ylim=(0, 100),
@@ -306,7 +306,7 @@ g.set(
     xscale="log",
     ylabel="Count",
     ylim=(0, 100),
-    xlabel="pass@1",
+    xlabel=r"$\operatorname{pass_i@1}$",
 )
 # Move legend to the empty subplot position
 g._legend.set_bbox_to_anchor((0.95, 0.25))

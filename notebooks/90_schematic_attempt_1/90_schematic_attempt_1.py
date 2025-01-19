@@ -54,7 +54,7 @@ ax1.set(
     xlim=(1, k.max()),
     yscale="log",
     ylim=(3.162e-2, 1.5e1),
-    xlabel=r"Number of Attempts $k$",
+    xlabel=r"Num. Attempts per Problem $k$",
     ylabel=r"$-\log(\operatorname{pass_{\mathcal{D}}@k})$",
     title="Average Power Law Scaling",
 )
@@ -83,7 +83,7 @@ ax2.set(
     yscale="log",
     xlim=(1, k.max()),
     ylim=(3.162e-2, 1.5e1),
-    xlabel=r"Number of Attempts $k$",
+    xlabel=r"Num. Attempts per Problem $k$",
     ylabel=r"$-\log (\operatorname{pass_i@k})$",
     title="Per-Problem Exponential Scaling",
 )
@@ -150,5 +150,5 @@ fig.text(
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir, plot_filename="combined_statistical_plots"
 )
-plt.show()
+# plt.show()
 print("Finished notebooks/90_schematic_attempt_1!")

@@ -1171,6 +1171,10 @@ def create_or_load_cross_validated_large_language_monkey_pythia_math_scaling_coe
                 refresh=False
             )
         )
+        # # For prototyping, subset to Pythia 12B.
+        # individual_outcomes_per_problem_df = individual_outcomes_per_problem_df[
+        #     individual_outcomes_per_problem_df["Model"] == "Pythia 12B"
+        # ]
 
         def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_wrapper(
             model: str, benchmark: str, subset_df: pd.DataFrame
@@ -1182,21 +1186,25 @@ def create_or_load_cross_validated_large_language_monkey_pythia_math_scaling_coe
             result_df["Benchmark"] = benchmark
             return result_df
 
-        dfs_list = joblib.Parallel(n_jobs=10)(
-            joblib.delayed(
-                cross_validate_power_law_coefficient_estimators_from_individual_outcomes_wrapper
-            )(model, benchmark, subset_df)
-            for (
-                model,
-                benchmark,
-            ), subset_df in individual_outcomes_per_problem_df.groupby(
-                src.globals.LARGE_LANGUAGE_MONKEYS_GROUPBY_COLS
+        cv_large_language_monkeys_pythia_math_scaling_coefficient_dfs_list = []
+        for (
+            model,
+            benchmark,
+        ), subset_df in individual_outcomes_per_problem_df.groupby(
+            src.globals.LARGE_LANGUAGE_MONKEYS_GROUPBY_COLS
+        ):
+            print(f"Processing model: {model}, benchmark: {benchmark}")
+            df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes_wrapper(
+                model=model, benchmark=benchmark, subset_df=subset_df
             )
-        )
+            cv_large_language_monkeys_pythia_math_scaling_coefficient_dfs_list.append(
+                df
+            )
 
         cv_large_language_monkeys_pythia_math_scaling_coefficient_df = pd.concat(
-            dfs_list, ignore_index=True
-        )
+            cv_large_language_monkeys_pythia_math_scaling_coefficient_dfs_list,
+            ignore_index=True,
+        ).reset_index(drop=True)
 
         cv_large_language_monkeys_pythia_math_scaling_coefficient_df.to_parquet(
             path=cv_large_language_monkeys_pythia_math_scaling_coefficient_df_path
@@ -2221,7 +2229,7 @@ def create_or_load_pretraining_probability_df(
 
 def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
     individual_outcomes_per_problem_df: pd.DataFrame,
-    num_repeats: int = 2,
+    num_repeats: int = 5,
     num_problems_list: Optional[List[int]] = None,
     num_samples_per_problem_list: Optional[List[int]] = None,
 ) -> pd.DataFrame:
@@ -2233,7 +2241,6 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
             64,
             96,
             128,
-            256,
         ]
         assert max(num_problems_list) <= len(unique_problem_indices)
     if num_samples_per_problem_list is None:
@@ -2241,8 +2248,8 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
             100,
             316,
             1000,
-            # 3162,
-            # 10000,
+            3162,
+            10000,
         ]
         assert max(num_samples_per_problem_list) <= len(unique_attempt_indices)
 
@@ -2300,25 +2307,9 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
         num_problems_list, num_samples_per_problem_list, range(num_repeats)
     )
     # Implementation 1 (Serial).
-    # cross_validated_power_law_coefficient_estimators_dfs_list = []
-    # for num_problems, num_samples_per_problem, repeat_idx in all_combos:
-    #     df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes_helper(
-    #         num_problems,
-    #         num_samples_per_problem,
-    #         repeat_idx,
-    #         individual_outcomes_per_problem,
-    #         individual_outcomes_per_problem_df,
-    #         unique_problem_indices,
-    #         unique_attempt_indices,
-    #     )
-    #     cross_validated_power_law_coefficient_estimators_dfs_list.append(df)
-    # Implementation 2 (Parallel).
-    cross_validated_power_law_coefficient_estimators_dfs_list = joblib.Parallel(
-        n_jobs=10, backend="threading"
-    )(
-        joblib.delayed(
-            cross_validate_power_law_coefficient_estimators_from_individual_outcomes_helper
-        )(
+    cross_validated_power_law_coefficient_estimators_dfs_list = []
+    for num_problems, num_samples_per_problem, repeat_idx in all_combos:
+        df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes_helper(
             num_problems,
             num_samples_per_problem,
             repeat_idx,
@@ -2327,8 +2318,24 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
             unique_problem_indices,
             unique_attempt_indices,
         )
-        for num_problems, num_samples_per_problem, repeat_idx in all_combos
-    )
+        cross_validated_power_law_coefficient_estimators_dfs_list.append(df)
+    # # Implementation 2 (Parallel).
+    # cross_validated_power_law_coefficient_estimators_dfs_list = joblib.Parallel(
+    #     n_jobs=10, backend="threading"
+    # )(
+    #     joblib.delayed(
+    #         cross_validate_power_law_coefficient_estimators_from_individual_outcomes_helper
+    #     )(
+    #         num_problems,
+    #         num_samples_per_problem,
+    #         repeat_idx,
+    #         individual_outcomes_per_problem,
+    #         individual_outcomes_per_problem_df,
+    #         unique_problem_indices,
+    #         unique_attempt_indices,
+    #     )
+    #     for num_problems, num_samples_per_problem, repeat_idx in all_combos
+    # )
 
     cross_validated_power_law_coefficient_estimators_df = pd.concat(
         cross_validated_power_law_coefficient_estimators_dfs_list, ignore_index=True
@@ -2457,6 +2464,35 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
         )
     )
 
+    subset_kumaraswamy_binomial_mle_df = pd.DataFrame(
+        src.analyze.fit_kumaraswamy_binomial_three_parameters_to_num_samples_and_num_successes(
+            num_samples_and_num_successes_df=subset_num_samples_and_num_successes_df
+        )
+    ).T
+
+    # Add power law exponent numerically.
+    subset_kumaraswamy_binomial_mle_df = (
+        src.analyze.compute_scaling_exponent_from_distributional_fit(
+            distributional_fit_df=subset_kumaraswamy_binomial_mle_df,
+            distribution="beta_three_parameter",
+        )
+    )
+
+    df_kumaraswamy_binomial_fit = pd.DataFrame(
+        {
+            "Num. Problems": num_problems,
+            "Num. Samples per Problem": [num_samples_per_problem],
+            "Fit Power Law Prefactor": [
+                subset_kumaraswamy_binomial_mle_df["Power Law Exponent"].values[0]
+            ],
+            "Fit Power Law Exponent": [
+                subset_kumaraswamy_binomial_mle_df["Power Law Exponent"].values[0]
+            ],
+            "Fit Method": "Kumaraswamy-Binomial",
+            "Repeat Index": [repeat_idx],
+        }
+    )
+
     subset_beta_binomial_mle_df = pd.DataFrame(
         src.analyze.fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
             num_samples_and_num_successes_df=subset_num_samples_and_num_successes_df
@@ -2481,12 +2517,17 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
             "Fit Power Law Exponent": [
                 subset_beta_binomial_mle_df["Power Law Exponent"].values[0]
             ],
-            "Fit Method": "Distribution",
+            "Fit Method": "Beta-Binomial",
             "Repeat Index": [repeat_idx],
         }
     )
 
-    result_df = pd.concat([df_lst_sqrs_fit, df_beta_binomial_fit], ignore_index=True)
+    # Columns: Num. Problems, Num. Samples per Problem, Fit Power Law Prefactor, Fit Power Law Exponent, Fit Method, Repeat Index
+    # 3 Rows: Least Squares, Kumaraswamy-Binomial, Beta-Binomial
+    result_df = pd.concat(
+        [df_lst_sqrs_fit, df_kumaraswamy_binomial_fit, df_beta_binomial_fit],
+        ignore_index=True,
+    )
     return result_df
 
 

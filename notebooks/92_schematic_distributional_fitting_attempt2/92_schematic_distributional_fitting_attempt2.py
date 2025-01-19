@@ -185,7 +185,7 @@ sns.heatmap(
     linewidths=0.0,
 )
 ax02.set(
-    xlabel=r"Number of Attempts $k$",
+    xlabel=r"Num. Attempts per Problem $k$",
     ylabel="Problem",
     title=r"Estimate $\operatorname{pass_i@k}$",
 )
@@ -226,7 +226,7 @@ ax03.legend(handles=handles, loc="lower left", fontsize=21)
 ax03.set(
     xscale="log",
     yscale="log",
-    xlabel=r"Number of Attempts $k$",
+    xlabel=r"Num. Attempts per Problem $k$",
     ylabel=r"$-\log (\operatorname{pass_{\mathcal{D}}@k})$",
     title=r"Fit Estimated $\operatorname{pass_{\mathcal{D}}@k}$",
 )
@@ -296,7 +296,7 @@ ax13.legend(handles=handles, loc="lower left", fontsize=21)
 ax13.set(
     xscale="log",
     yscale="log",
-    xlabel=r"Number of Attempts $k$",
+    xlabel=r"Num. Attempts per Problem $k$",
     ylabel=r"$-\log (\operatorname{pass_{\mathcal{D}}@k})$",
     title=r"Fit Simulated $\operatorname{pass_{\mathcal{D}}@k}$",
 )
@@ -392,6 +392,6 @@ plt.tight_layout()
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir, plot_filename="distributional_fitting_schematic"
 )
-plt.show()
+# plt.show()
 
 print("Finished0 notebooks/92_schematic_distributional_fitting")
