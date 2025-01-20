@@ -18,7 +18,7 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
     refresh=False,
 )
 
-cv_synthetic_scaling_exponents_df = src.analyze.create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
+synthetic_cross_validated_scaling_coeff_df = src.analyze.create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
     # refresh=False,
     refresh=True,
 )
@@ -26,7 +26,7 @@ cv_synthetic_scaling_exponents_df = src.analyze.create_or_load_cross_validated_s
 
 plt.close()
 g = sns.relplot(
-    data=cv_synthetic_scaling_exponents_df,
+    data=synthetic_cross_validated_scaling_coeff_df,
     kind="line",
     x="Num. Samples per Problem",
     y="Full Data Least Squares Relative Error",
@@ -72,7 +72,7 @@ plt.show()
 
 plt.close()
 g = sns.relplot(
-    data=cv_synthetic_scaling_exponents_df,
+    data=synthetic_cross_validated_scaling_coeff_df,
     kind="line",
     x="Num. Samples per Problem",
     y="Asymptotic Relative Error",

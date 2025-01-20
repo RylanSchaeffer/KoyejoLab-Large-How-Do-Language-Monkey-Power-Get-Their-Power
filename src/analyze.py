@@ -1322,18 +1322,18 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
         np.random.seed(0)
 
         true_distribution_to_params_dict = {
-            "beta": [
+            "kumaraswamy": [
                 {"a": 0.05, "b": 1.5, "scale": 1.0},
-                {"a": 0.05, "b": 3.5, "scale": 1.0},
-                {"a": 0.2, "b": 1.5, "scale": 0.3},
+                # {"a": 0.05, "b": 3.5, "scale": 1.0},
+                # {"a": 0.2, "b": 1.5, "scale": 0.3},
                 {"a": 0.2, "b": 3.5, "scale": 0.3},
             ],
-            "kumaraswamy": [
-                # {"a": 0.05, "b": 1.5, "scale": 1.0},
+            "beta": [
+                {"a": 0.05, "b": 1.5, "scale": 1.0},
                 # {"a": 0.05, "b": 3.5, "scale": 1.0},
-                # {"a": 0.2, "b": 1.5, "scale": 1.0},
-                # {"a": 0.2, "b": 3.5, "scale": 1.0},
-            ]
+                # {"a": 0.2, "b": 1.5, "scale": 0.3},
+                {"a": 0.2, "b": 3.5, "scale": 0.3},
+            ],
             # "scaled_beta": [
             #     {"a": 0.5, "b": 1.0, "scale": 0.05},
             #     {"a": 0.5, "b": 1.0, "scale": 0.1},
@@ -1343,15 +1343,13 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
             #     {"a": 0.5, "b": 5.0, "scale": 0.5},
             # ],
         }
-        fit_distributions = [
-            "Beta",
-            "Kumaraswamy",
-        ]
+        # fit_distributions = [
+        #     "Beta",
+        #     "Kumaraswamy",
+        # ]
 
         scaling_exponents_dfs_list = []
-        for true_distribution, fit_distribution in itertools.product(
-            true_distribution_to_params_dict, fit_distributions
-        ):
+        for true_distribution in true_distribution_to_params_dict:
             for true_distribution_params in true_distribution_to_params_dict[
                 true_distribution
             ]:
@@ -1373,24 +1371,23 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
                         f"Unknown distribution: {true_distribution}"
                     )
 
-                for simulation_idx in np.arange(2, dtype=int):
+                for simulation_idx in np.arange(5, dtype=int):
                     individual_outcomes_per_problem_df = (
                         sample_synthetic_individual_outcomes_per_problem_df(
                             num_problems=10_000,
-                            num_samples_per_problem=10_000_000,
+                            num_samples_per_problem=1_000_000,
                             distribution=true_distribution,
                             distribution_parameters=true_distribution_params,
                         )
                     )
                     df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
                         individual_outcomes_per_problem_df=individual_outcomes_per_problem_df,
-                        num_repeats=10,
+                        num_repeats=1,
                     )
                     df["True Distribution"] = true_distribution_nice_str
                     df[
                         "True Distribution Asymptotic Power Law Exponent"
                     ] = true_asymptotic_power_law_exponent
-                    df["Fit Distribution"] = fit_distribution
                     df["Simulation Idx"] = simulation_idx
                     pprint.pprint(df)
                     scaling_exponents_dfs_list.append(df)
@@ -2494,7 +2491,7 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
     subset_avg_pass_at_k_df["Neg Log Score"] = -np.log(subset_avg_pass_at_k_df["Score"])
     subset_avg_pass_at_k_df["Placeholder"] = "Placeholder"
     (
-        _,
+        subset_avg_pass_at_k_with_predictions_df,
         subset_least_sqrs_fitted_power_law_parameters_df,
     ) = src.analyze.fit_power_law(
         df=subset_avg_pass_at_k_df,
@@ -2561,7 +2558,7 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
             "Num. Problems": num_problems,
             "Num. Samples per Problem": [num_samples_per_problem],
             "Fit Power Law Prefactor": [
-                subset_kumaraswamy_binomial_mle_df["Power Law Exponent"].values[0]
+                subset_kumaraswamy_binomial_mle_df["Power Law Prefactor"].values[0]
             ],
             "Fit Power Law Exponent": [
                 subset_kumaraswamy_binomial_mle_df["Power Law Exponent"].values[0]
@@ -2590,7 +2587,7 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
             "Num. Problems": num_problems,
             "Num. Samples per Problem": [num_samples_per_problem],
             "Fit Power Law Prefactor": [
-                subset_beta_binomial_mle_df["Power Law Exponent"].values[0]
+                subset_beta_binomial_mle_df["Power Law Prefactor"].values[0]
             ],
             "Fit Power Law Exponent": [
                 subset_beta_binomial_mle_df["Power Law Exponent"].values[0]
@@ -2599,6 +2596,42 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
             "Repeat Index": [repeat_idx],
         }
     )
+
+    # # Debugging.
+    # import matplotlib.pyplot as plt
+    #
+    # plt.close()
+    # plt.plot(
+    #     subset_avg_pass_at_k_df["Scaling Parameter"],
+    #     subset_avg_pass_at_k_df["Neg Log Score"],
+    #     label="Real",
+    # )
+    # plt.plot(
+    #     subset_avg_pass_at_k_with_predictions_df["Scaling Parameter"],
+    #     subset_avg_pass_at_k_with_predictions_df["Predicted Neg Log Score"],
+    #     label="Lst Sqr",
+    # )
+    # plt.plot(
+    #     ks_list,
+    #     df_kumaraswamy_binomial_fit["Fit Power Law Prefactor"][0]
+    #     * np.power(
+    #         np.array(ks_list), -df_kumaraswamy_binomial_fit["Fit Power Law Exponent"][0]
+    #     ),
+    #     label="KumarBin",
+    # )
+    # plt.plot(
+    #     ks_list,
+    #     df_beta_binomial_fit["Fit Power Law Prefactor"][0]
+    #     * np.power(
+    #         np.array(ks_list), -df_beta_binomial_fit["Fit Power Law Exponent"][0]
+    #     ),
+    #     label="BetaBin",
+    # )
+    # plt.xscale("log")
+    # plt.yscale("log")
+    # plt.legend()
+    # plt.tight_layout()
+    # plt.show()
 
     # Columns: Num. Problems, Num. Samples per Problem, Fit Power Law Prefactor, Fit Power Law Exponent, Fit Method, Repeat Index
     # 3 Rows: Least Squares, Kumaraswamy-Binomial, Beta-Binomial
@@ -3264,15 +3297,11 @@ def sample_synthetic_individual_outcomes_per_problem_df(
         a = distribution_parameters["a"]
         b = distribution_parameters["b"]
         scale = distribution_parameters.get("scale", 1.0)
-        if scale != 1.0:
-            # TODO: Take scale into account.
-            raise NotImplementedError(
-                "Scale parameter not yet implemented for Kumaraswamy."
-            )
         # Generate uniform random variables
         u = np.random.uniform(0.0, 1.0, size=(num_problems,))
         # Transform to Kumaraswamy using inverse CDF.
         true_pass_at_1_per_problem = np.power(1.0 - np.power(1.0 - u, 1.0 / b), 1.0 / a)
+        true_pass_at_1_per_problem *= scale
         assert np.all(
             (0.0 <= true_pass_at_1_per_problem) & (true_pass_at_1_per_problem <= 1.0)
         )

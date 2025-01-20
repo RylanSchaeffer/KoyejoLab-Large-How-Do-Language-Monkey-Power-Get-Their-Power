@@ -359,7 +359,7 @@ g = sns.scatterplot(
 # Plot dotted identity line.
 g.plot([0, 1], [0, 1], ls="--", c=".3")
 g.set(
-    title="Large Language Monkeys",
+    title="Best-of-N Jailbreaking",
     xlim=(0.0, 0.6),
     ylim=(0.0, 0.6),
     xlabel=r"Power Law Exponent (Kumaraswamy-Binomial)",
@@ -374,8 +374,8 @@ src.plot.save_plot_with_multiple_extensions(
 
 
 bon_jailbreaking_beta_binomial_mle_df = src.analyze.create_or_load_bon_jailbreaking_text_beta_binomial_mle_df(
-    # refresh=False,
-    refresh=True,
+    refresh=False,
+    # refresh=True,
 )
 print("Best-of-N Jailbreaking ScaledBeta-Binomial 3-Parameter Fit: ")
 pprint.pprint(bon_jailbreaking_beta_binomial_mle_df)

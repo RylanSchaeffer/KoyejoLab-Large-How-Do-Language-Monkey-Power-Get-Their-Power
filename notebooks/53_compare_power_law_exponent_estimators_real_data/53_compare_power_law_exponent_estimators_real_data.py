@@ -19,19 +19,44 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
     refresh=False,
 )
 
-bon_jailbreaking_text_cross_validated_scaling_coeff_df = src.analyze.create_or_load_cross_validated_bon_jailbreaking_text_scaling_coefficient_data_df(
-    refresh=False,
-    # refresh=True,
-)
+# bon_jailbreaking_text_cross_validated_scaling_coeff_df = src.analyze.create_or_load_cross_validated_bon_jailbreaking_text_scaling_coefficient_data_df(
+#     # refresh=False,
+#     refresh=True,
+# )
 
 # Load backtested scaling coefficient fits.
 llmonkeys_pythia_math_cross_validated_scaling_coeff_df = src.analyze.create_or_load_cross_validated_large_language_monkey_pythia_math_scaling_coefficient_data_df(
     refresh=False,
     # refresh=True,
 )
+# Exclude this antequated method.
+llmonkeys_pythia_math_cross_validated_scaling_coeff_df = (
+    llmonkeys_pythia_math_cross_validated_scaling_coeff_df[
+        llmonkeys_pythia_math_cross_validated_scaling_coeff_df["Fit Method"]
+        != "Beta-Binomial"
+    ]
+)
 
+
+# Load the actual pass_D@k data to overlay.
+llmonkeys_pythia_math_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_pythia_math_pass_at_k_df(
+    refresh=False,
+    # refresh=True,
+)
+
+llmonkeys_pythia_math_neg_log_avg_pass_at_k_df = (
+    llmonkeys_pythia_math_pass_at_k_df.groupby(
+        src.globals.LARGE_LANGUAGE_MONKEYS_GROUPBY_COLS + ["Scaling Parameter"]
+    )["Score"]
+    .mean()
+    .reset_index()
+    .rename(columns={"Score": "Avg Score"})
+)
+llmonkeys_pythia_math_neg_log_avg_pass_at_k_df["Neg Log Avg Score"] = -np.log(
+    llmonkeys_pythia_math_neg_log_avg_pass_at_k_df["Avg Score"]
+)
 # Convert the scaling parameters to forecasts.
-ks_list = np.unique(np.logspace(0, 5, 100).astype(int))
+ks_list = np.unique(np.logspace(0, 4, 100).astype(int))
 predicted_power_law_curves_dfs_list = []
 for row_idx, row in llmonkeys_pythia_math_cross_validated_scaling_coeff_df.iterrows():
     df = pd.DataFrame.from_dict(
@@ -76,13 +101,27 @@ g.set(
     xlabel=r"Num. Attempts per Problem $k$",
     ylabel=r"$-\log ( \operatorname{pass_{\mathcal{D}}@k})$",
 )
+g.set_titles(row_template="{row_name} Samples per Problem")
 num_samples_per_problem_values = np.sort(
     predicted_power_law_curves_df["Num. Samples per Problem"].unique()
 )
-for row_idx in range(g.axes.shape[0]):
-    num_samples_per_problem = num_samples_per_problem_values[row_idx]
-    for col_idx in range(g.axes.shape[1]):
+for col_idx, model in enumerate(src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER):
+    model_subset_df = llmonkeys_pythia_math_neg_log_avg_pass_at_k_df[
+        llmonkeys_pythia_math_neg_log_avg_pass_at_k_df["Model"] == model
+    ]
+    for row_idx, num_samples_per_problem in enumerate(num_samples_per_problem_values):
         ax = g.axes[row_idx, col_idx]
+        sns.lineplot(
+            data=model_subset_df,
+            x="Scaling Parameter",
+            y="Neg Log Avg Score",
+            # hue="Model",
+            # hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
+            legend=False,
+            color="black",
+            # alpha=0.5,
+            ax=ax,
+        )
         ax.axvline(
             x=num_samples_per_problem,
             color="k",
@@ -91,9 +130,17 @@ for row_idx in range(g.axes.shape[0]):
 sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
-    plot_filename="y=neg_log_avg_score_x=scaling_parameter_hue=model_col=model_row=num_samples_per_problem_style=fit_method",
+    plot_filename="llmonkeys_y=neg_log_avg_score_x=scaling_parameter_hue=model_col=model_row=num_samples_per_problem_style=fit_method",
 )
-# plt.show()
+plt.show()
+
+
+# Compute mean squared error between predicted and actual pass_D@k.
+llmonkeys_pythia_math_neg_log_avg_pass_at_10000_df = (
+    llmonkeys_pythia_math_neg_log_avg_pass_at_k_df[
+        llmonkeys_pythia_math_neg_log_avg_pass_at_k_df["Scaling Parameter"] == 10000
+    ]
+)
 
 plt.close()
 g = sns.relplot(
@@ -113,20 +160,14 @@ g = sns.relplot(
 g.set(
     xscale="log",
     yscale="log",
-    xlabel="Num. Attempts per Problem",
+    ylabel=r"Fit Power Law Exponent $\hat{b}$",
 )
 sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
-    plot_filename="y=fit_power_law_exponent_x=num_samples_per_problem_hue=model_col=model_row=num_problems_style=fit_method",
+    plot_filename="llmonkeys_y=fit_power_law_exponent_x=num_samples_per_problem_hue=model_col=model_row=num_problems_style=fit_method",
 )
 # plt.show()
 
-
-# # Load the actual pass_D@k data to overlay.
-# llmonkeys_pythia_math_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_pythia_math_pass_at_k_df(
-#     refresh=False,
-#     # refresh=True,
-# )
 
 # plt.close()
