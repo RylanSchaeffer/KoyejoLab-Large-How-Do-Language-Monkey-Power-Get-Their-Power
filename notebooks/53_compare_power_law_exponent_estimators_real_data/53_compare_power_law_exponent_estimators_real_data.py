@@ -29,13 +29,13 @@ llmonkeys_pythia_math_cross_validated_scaling_coeff_df = src.analyze.create_or_l
     refresh=False,
     # refresh=True,
 )
-# Exclude this antequated method.
-llmonkeys_pythia_math_cross_validated_scaling_coeff_df = (
-    llmonkeys_pythia_math_cross_validated_scaling_coeff_df[
-        llmonkeys_pythia_math_cross_validated_scaling_coeff_df["Fit Method"]
-        != "Beta-Binomial"
-    ]
-)
+# # Exclude this antequated method.
+# llmonkeys_pythia_math_cross_validated_scaling_coeff_df = (
+#     llmonkeys_pythia_math_cross_validated_scaling_coeff_df[
+#         llmonkeys_pythia_math_cross_validated_scaling_coeff_df["Fit Method"]
+#         != "Beta-Binomial"
+#     ]
+# )
 
 
 # Load the actual pass_D@k data to overlay.
@@ -55,6 +55,8 @@ llmonkeys_pythia_math_neg_log_avg_pass_at_k_df = (
 llmonkeys_pythia_math_neg_log_avg_pass_at_k_df["Neg Log Avg Score"] = -np.log(
     llmonkeys_pythia_math_neg_log_avg_pass_at_k_df["Avg Score"]
 )
+
+
 # Convert the scaling parameters to forecasts.
 ks_list = np.unique(np.logspace(0, 4, 100).astype(int))
 predicted_power_law_curves_dfs_list = []
@@ -62,7 +64,7 @@ for row_idx, row in llmonkeys_pythia_math_cross_validated_scaling_coeff_df.iterr
     df = pd.DataFrame.from_dict(
         {
             "Scaling Parameter": ks_list,
-            "Neg Log Score": row["Fit Power Law Prefactor"]
+            "Neg Log Avg Score": row["Fit Power Law Prefactor"]
             * np.power(ks_list, -row["Fit Power Law Exponent"]),
             "Num. Problems": [row["Num. Problems"]] * len(ks_list),
             "Num. Samples per Problem": [row["Num. Samples per Problem"]]
@@ -78,6 +80,61 @@ predicted_power_law_curves_df = pd.concat(
     predicted_power_law_curves_dfs_list, ignore_index=True
 ).reset_index(drop=True)
 
+
+# Compute mean squared error between predicted and actual pass_D@k.
+llmonkeys_pythia_math_neg_log_avg_pass_at_10000_df = (
+    llmonkeys_pythia_math_neg_log_avg_pass_at_k_df[
+        llmonkeys_pythia_math_neg_log_avg_pass_at_k_df["Scaling Parameter"] == 10000
+    ]
+)
+predicted_power_law_curves_at_10000_df = predicted_power_law_curves_df[
+    predicted_power_law_curves_df["Scaling Parameter"] == 10000
+]
+joint_neg_log_avg_score_at_10000_df = (
+    llmonkeys_pythia_math_neg_log_avg_pass_at_10000_df.merge(
+        predicted_power_law_curves_at_10000_df,
+        on=src.globals.LARGE_LANGUAGE_MONKEYS_GROUPBY_COLS + ["Scaling Parameter"],
+        how="outer",
+        suffixes=("_Actual", "_Predicted"),
+    )
+)
+
+joint_neg_log_avg_score_at_10000_df["Squared Log Error"] = np.square(
+    np.log(joint_neg_log_avg_score_at_10000_df["Neg Log Avg Score_Actual"])
+    - np.log(joint_neg_log_avg_score_at_10000_df["Neg Log Avg Score_Predicted"])
+)
+plt.close()
+g = sns.relplot(
+    data=joint_neg_log_avg_score_at_10000_df,
+    kind="line",
+    x="Num. Samples per Problem",
+    y="Squared Log Error",
+    col="Model",
+    col_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
+    hue="Model",
+    hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
+    row="Num. Problems",
+    style="Fit Method",
+    facet_kws={"margin_titles": True},
+)
+g.set(
+    xscale="log",
+    yscale="log",
+    ylabel="",  # We will add this ourselves.
+)
+g.axes[int(g.axes.shape[0] // 2), 0].set_ylabel(
+    "Squared Log Error "
+    + r"$:= \Big( \log \big( \operatorname{pass_{\mathcal{D}}@10000} \big) - \log \big( \widehat{\operatorname{pass_{\mathcal{D}}@10000}} \big) \Big)^2$"
+)
+g.set_titles(row_template="{row_name} Problems", col_template="{col_name}")
+sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
+src.plot.save_plot_with_multiple_extensions(
+    plot_dir=results_dir,
+    plot_filename="llmonkeys_y=mean_squared_log_error_x=num_samples_per_problem_hue=model_col=model_row=num_problems_style=fit_method",
+)
+# plt.show()
+
+
 plt.close()
 g = sns.relplot(
     data=predicted_power_law_curves_df[
@@ -86,7 +143,7 @@ g = sns.relplot(
     ],
     kind="line",
     x="Scaling Parameter",
-    y="Neg Log Score",
+    y="Neg Log Avg Score",
     hue="Model",
     hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
     col="Model",
@@ -132,15 +189,8 @@ src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
     plot_filename="llmonkeys_y=neg_log_avg_score_x=scaling_parameter_hue=model_col=model_row=num_samples_per_problem_style=fit_method",
 )
-plt.show()
+# plt.show()
 
-
-# Compute mean squared error between predicted and actual pass_D@k.
-llmonkeys_pythia_math_neg_log_avg_pass_at_10000_df = (
-    llmonkeys_pythia_math_neg_log_avg_pass_at_k_df[
-        llmonkeys_pythia_math_neg_log_avg_pass_at_k_df["Scaling Parameter"] == 10000
-    ]
-)
 
 plt.close()
 g = sns.relplot(

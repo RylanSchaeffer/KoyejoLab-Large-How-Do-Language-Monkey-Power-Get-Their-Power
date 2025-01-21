@@ -2320,6 +2320,8 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
         assert max(num_problems_list) <= len(unique_problem_indices)
     if num_samples_per_problem_list is None:
         num_samples_per_problem_list = [
+            10,
+            32,
             100,
             316,
             1000,
