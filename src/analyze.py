@@ -1,3 +1,4 @@
+from concurrent.futures import ProcessPoolExecutor
 from datasets import load_dataset
 import itertools
 import joblib
@@ -1318,35 +1319,20 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
         # 3. Fit the distributional parameters to the synthetic data.
         # 4. Compute the scaling exponent from the distributional fits.
 
-        # Seed to make this reproducible.
-        np.random.seed(0)
-
         true_distribution_to_params_dict = {
             "kumaraswamy": [
                 {"a": 0.05, "b": 1.5, "scale": 1.0},
-                # {"a": 0.05, "b": 3.5, "scale": 1.0},
-                # {"a": 0.2, "b": 1.5, "scale": 0.3},
+                {"a": 0.05, "b": 3.5, "scale": 1.0},
+                {"a": 0.2, "b": 1.5, "scale": 0.3},
                 {"a": 0.2, "b": 3.5, "scale": 0.3},
             ],
             "beta": [
                 {"a": 0.05, "b": 1.5, "scale": 1.0},
-                # {"a": 0.05, "b": 3.5, "scale": 1.0},
-                # {"a": 0.2, "b": 1.5, "scale": 0.3},
+                {"a": 0.05, "b": 3.5, "scale": 1.0},
+                {"a": 0.2, "b": 1.5, "scale": 0.3},
                 {"a": 0.2, "b": 3.5, "scale": 0.3},
             ],
-            # "scaled_beta": [
-            #     {"a": 0.5, "b": 1.0, "scale": 0.05},
-            #     {"a": 0.5, "b": 1.0, "scale": 0.1},
-            #     {"a": 0.5, "b": 5.0, "scale": 0.1},
-            #     {"a": 0.5, "b": 1.0, "scale": 0.05},
-            #     {"a": 0.5, "b": 1.0, "scale": 0.5},
-            #     {"a": 0.5, "b": 5.0, "scale": 0.5},
-            # ],
         }
-        # fit_distributions = [
-        #     "Beta",
-        #     "Kumaraswamy",
-        # ]
 
         scaling_exponents_dfs_list = []
         for true_distribution in true_distribution_to_params_dict:
@@ -1371,26 +1357,49 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
                         f"Unknown distribution: {true_distribution}"
                     )
 
-                for simulation_idx in np.arange(5, dtype=int):
-                    individual_outcomes_per_problem_df = (
-                        sample_synthetic_individual_outcomes_per_problem_df(
-                            num_problems=10_000,
-                            num_samples_per_problem=1_000_000,
-                            distribution=true_distribution,
-                            distribution_parameters=true_distribution_params,
-                        )
+                # Prepare arguments for each simulation
+                simulation_args = [
+                    (
+                        idx,
+                        true_distribution,
+                        true_distribution_params,
+                        true_distribution_nice_str,
+                        true_asymptotic_power_law_exponent,
                     )
-                    df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
-                        individual_outcomes_per_problem_df=individual_outcomes_per_problem_df,
-                        num_repeats=1,
+                    for idx in range(5)
+                ]
+
+                # for simulation_idx in np.arange(5, dtype=int):
+                #     individual_outcomes_per_problem_df = (
+                #         sample_synthetic_individual_outcomes_per_problem_df(
+                #             num_problems=1_000,
+                #             num_samples_per_problem=100_000,
+                #             distribution=true_distribution,
+                #             distribution_parameters=true_distribution_params,
+                #         )
+                #     )
+                #     df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
+                #         individual_outcomes_per_problem_df=individual_outcomes_per_problem_df,
+                #         num_repeats=1,
+                #     )
+                #     df["True Distribution"] = true_distribution_nice_str
+                #     df[
+                #         "True Distribution Asymptotic Power Law Exponent"
+                #     ] = true_asymptotic_power_law_exponent
+                #     df["Simulation Idx"] = simulation_idx
+                #     pprint.pprint(df)
+                #     scaling_exponents_dfs_list.append(df)
+
+                # Run simulations in parallel
+                # Run simulations in parallel
+                with ProcessPoolExecutor(max_workers=16) as executor:
+                    # Map the simulation function directly to the arguments
+                    results = executor.map(
+                        create_or_load_cross_validated_synthetic_scaling_coefficient_data_df_helper,
+                        simulation_args,
                     )
-                    df["True Distribution"] = true_distribution_nice_str
-                    df[
-                        "True Distribution Asymptotic Power Law Exponent"
-                    ] = true_asymptotic_power_law_exponent
-                    df["Simulation Idx"] = simulation_idx
-                    pprint.pprint(df)
-                    scaling_exponents_dfs_list.append(df)
+                    for df in results:
+                        scaling_exponents_dfs_list.append(df)
 
         synthetic_scaling_exponents_df = pd.concat(
             scaling_exponents_dfs_list, ignore_index=True
@@ -1427,6 +1436,41 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
         synthetic_scaling_exponents_df.shape,
     )
     return synthetic_scaling_exponents_df
+
+
+def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df_helper(args):
+    """Function to run a single simulation that will be parallelized"""
+    # Unpack the arguments tuple
+    (
+        simulation_idx,
+        true_distribution,
+        true_distribution_params,
+        true_distribution_nice_str,
+        true_asymptotic_power_law_exponent,
+    ) = args
+
+    np.random.seed(simulation_idx)
+
+    individual_outcomes_per_problem_df = (
+        sample_synthetic_individual_outcomes_per_problem_df(
+            num_problems=1_000,
+            num_samples_per_problem=100_000,
+            distribution=true_distribution,
+            distribution_parameters=true_distribution_params,
+        )
+    )
+
+    df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
+        individual_outcomes_per_problem_df=individual_outcomes_per_problem_df,
+        num_repeats=5,
+    )
+
+    df["True Distribution"] = true_distribution_nice_str
+    df[
+        "True Distribution Asymptotic Power Law Exponent"
+    ] = true_asymptotic_power_law_exponent
+    df["Simulation Idx"] = simulation_idx
+    return df
 
 
 def create_or_load_large_language_monkeys_code_contests_individual_outcomes_df(
