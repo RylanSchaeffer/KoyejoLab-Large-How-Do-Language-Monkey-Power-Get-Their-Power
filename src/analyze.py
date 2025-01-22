@@ -10,6 +10,7 @@ import pprint
 from scipy import integrate
 from scipy.optimize import minimize
 import scipy.stats
+import scipy.stats._continuous_distns
 from typing import Dict, List, Optional, Tuple, Union
 
 import src.globals
@@ -2759,13 +2760,17 @@ def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
     scale = min(scale, 1.0)
 
     # Start with reasonable initial alpha, beta.
-    alpha, beta, _, _ = scipy.stats.beta.fit(
-        np.clip(
-            fraction_successes, epsilon, 1.0 - epsilon
-        ),  # Make sure that we remain in [0., 1.]
-        floc=0.0,
-        fscale=scale,  # Force the scale to be the max scale.
-    )
+    try:
+        alpha, beta, _, _ = scipy.stats.beta.fit(
+            np.clip(
+                fraction_successes, epsilon, 1.0 - epsilon
+            ),  # Make sure that we remain in [0., 1.]
+            floc=0.0,
+            fscale=scale,  # Force the scale to be the max scale.
+        )
+    except scipy.stats._continuous_distns.FitSolverError:
+        alpha = 0.35
+        beta = 3.5
     initial_params = (alpha, beta)
     # Create extremely generous bounds for alpha, beta.
     bounds = [
@@ -2891,13 +2896,17 @@ def fit_beta_negative_binomial_three_parameters_to_num_samples_and_num_successes
     scale = min(scale, 1.0)
 
     # Start with reasonable initial alpha, beta.
-    alpha, beta, _, _ = scipy.stats.beta.fit(
-        np.clip(
-            fraction_successes, epsilon, 1.0 - epsilon
-        ),  # Make sure that we remain in [0., 1.]
-        floc=0.0,
-        fscale=scale,  # Force the scale to be the max scale.
-    )
+    try:
+        alpha, beta, _, _ = scipy.stats.beta.fit(
+            np.clip(
+                fraction_successes, epsilon, 1.0 - epsilon
+            ),  # Make sure that we remain in [0., 1.]
+            floc=0.0,
+            fscale=scale,  # Force the scale to be the max scale.
+        )
+    except scipy.stats._continuous_distns.FitSolverError:
+        alpha = 0.35
+        beta = 3.5
     initial_params = (alpha, beta)
     # Create extremely generous bounds for alpha, beta.
     bounds = [
@@ -2978,13 +2987,17 @@ def fit_kumaraswamy_binomial_three_parameters_to_num_samples_and_num_successes(
     scale = min(scale, 1.0)
 
     # Start with reasonable initial alpha, beta.
-    alpha, beta, _, _ = scipy.stats.beta.fit(
-        np.clip(
-            fraction_successes, epsilon, 1.0 - epsilon
-        ),  # Make sure that we remain in [0., 1.]
-        floc=0.0,
-        fscale=scale,  # Force the scale to be the max scale.
-    )
+    try:
+        alpha, beta, _, _ = scipy.stats.beta.fit(
+            np.clip(
+                fraction_successes, epsilon, 1.0 - epsilon
+            ),  # Make sure that we remain in [0., 1.]
+            floc=0.0,
+            fscale=scale,  # Force the scale to be the max scale.
+        )
+    except scipy.stats._continuous_distns.FitSolverError:
+        alpha = 0.35
+        beta = 3.5
     initial_params = (alpha, beta)
     # Create extremely generous bounds for alpha, beta.
     bounds = [
