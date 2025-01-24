@@ -19,8 +19,8 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
 )
 
 synthetic_cross_validated_scaling_coeff_df = src.analyze.create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
-    refresh=False,
-    # refresh=True,
+    # refresh=False,
+    refresh=True,
 )
 
 
@@ -69,12 +69,15 @@ g = sns.relplot(
     palette="cool",
     row="Num. Problems",
     col="True Distribution",
-    facet_kws={"margin_titles": True, "sharey": True},
+    facet_kws={"margin_titles": True, "sharey": False},
 )
 g.set(
     xscale="log",
     yscale="log",
-    ylabel=r"Relative Error := $|\hat{b} - b| / b$",
+    ylabel="",
+)
+g.axes[int(g.axes.shape[0] // 2), 0].set_ylabel(
+    r"Relative Error := $|\hat{b} - b| / b$"
 )
 g.set_titles(col_template="{col_name}", row_template="{row_name} Problems")
 sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))

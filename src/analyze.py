@@ -339,22 +339,25 @@ def compute_kumaraswamy_binomial_three_parameters_distribution_neg_log_likelihoo
         if not (0 <= num_success <= num_sample):
             return 0.0
 
-        # binomial coefficient binom(n, x)
-        binom_factor = mpmath.binomial(int(num_sample), int(num_success))
+        # Increase precision of 250 decimal digits.
+        with mpmath.workdps(250):
+            # binomial coefficient binom(n, x)
+            binom_factor = mpmath.binomial(int(num_sample), int(num_success))
 
-        # alpha * beta / c^alpha
-        alpha_beta_over_c_to_alpha = alpha * beta / mpmath.power(scale, alpha)
+            # alpha * beta / c^alpha
+            alpha_beta_over_c_to_alpha = alpha * beta / mpmath.power(scale, alpha)
 
-        def integrand(p):
-            return (
-                mpmath.power(p, num_success + alpha - 1.0)
-                * mpmath.power(1.0 - p, num_sample - num_success)
-                * mpmath.power(1.0 - mpmath.power(p / scale, alpha), beta - 1.0)
-            )
+            def integrand(p):
+                return (
+                    mpmath.power(p, num_success + alpha - 1.0)
+                    * mpmath.power(1.0 - p, num_sample - num_success)
+                    * mpmath.power(1.0 - mpmath.power(p / scale, alpha), beta - 1.0)
+                )
 
-        integral = mpmath.quad(integrand, [0.0, scale])
-        pmf = binom_factor * alpha_beta_over_c_to_alpha * integral
-        nll = -mpmath.log(pmf)
+            integral = mpmath.quad(integrand, [0.0, scale])
+            pmf = binom_factor * alpha_beta_over_c_to_alpha * integral
+            nll = -mpmath.log(pmf)
+
         nll_arr[idx] = float(nll)
 
     avg_nll: float = np.mean(nll_arr)
@@ -1322,16 +1325,16 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
 
         true_distribution_to_params_dict = {
             "kumaraswamy": [
-                {"a": 0.05, "b": 1.5, "scale": 1.0},
-                {"a": 0.05, "b": 3.5, "scale": 1.0},
                 {"a": 0.2, "b": 1.5, "scale": 0.3},
                 {"a": 0.2, "b": 3.5, "scale": 0.3},
+                {"a": 0.05, "b": 1.5, "scale": 1.0},
+                {"a": 0.05, "b": 3.5, "scale": 1.0},
             ],
             "beta": [
-                {"a": 0.05, "b": 1.5, "scale": 1.0},
-                {"a": 0.05, "b": 3.5, "scale": 1.0},
                 {"a": 0.2, "b": 1.5, "scale": 0.3},
                 {"a": 0.2, "b": 3.5, "scale": 0.3},
+                {"a": 0.05, "b": 1.5, "scale": 1.0},
+                {"a": 0.05, "b": 3.5, "scale": 1.0},
             ],
         }
 
@@ -2726,7 +2729,7 @@ def estimate_pass_at_k(
 
 def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
     num_samples_and_num_successes_df: pd.DataFrame,
-    maxiter: int = 25,
+    maxiter: int = 1000,
     # epsilon: Optional[float] = None,
     epsilon: Optional[float] = 1e-6,
 ) -> pd.Series:
@@ -2862,7 +2865,7 @@ def fit_beta_binomial_two_parameters_to_num_samples_and_num_successes(
 
 def fit_beta_negative_binomial_three_parameters_to_num_samples_and_num_successes(
     num_samples_and_num_successes_df: pd.DataFrame,
-    maxiter: int = 25,
+    maxiter: int = 1000,
     # epsilon: Optional[float] = None,
     epsilon: Optional[float] = 1e-6,
 ) -> pd.Series:
@@ -2953,7 +2956,7 @@ def fit_beta_negative_binomial_three_parameters_to_num_samples_and_num_successes
 
 def fit_kumaraswamy_binomial_three_parameters_to_num_samples_and_num_successes(
     num_samples_and_num_successes_df: pd.DataFrame,
-    maxiter: int = 25,
+    maxiter: int = 1000,
     # epsilon: Optional[float] = None,
     epsilon: Optional[float] = 1e-6,
 ) -> pd.Series:
@@ -3359,8 +3362,9 @@ def sample_synthetic_individual_outcomes_per_problem_df(
         # Generate uniform random variables
         u = np.random.uniform(0.0, 1.0, size=(num_problems,))
         # Transform to Kumaraswamy using inverse CDF.
-        true_pass_at_1_per_problem = np.power(1.0 - np.power(1.0 - u, 1.0 / b), 1.0 / a)
-        true_pass_at_1_per_problem *= scale
+        true_pass_at_1_per_problem = scale * np.power(
+            1.0 - np.power(1.0 - u, 1.0 / b), 1.0 / a
+        )
         assert np.all(
             (0.0 <= true_pass_at_1_per_problem) & (true_pass_at_1_per_problem <= 1.0)
         )
