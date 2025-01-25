@@ -176,7 +176,7 @@ def compute_beta_three_parameter_distribution_integrand(
 
 def compute_discretized_neg_log_likelihood(
     params: Tuple[float, float],
-    data: np.ndarray,
+    pass_i_at_1_arr: np.ndarray,
     bins: np.ndarray,
     distribution: str = "beta",
     epsilon: float = 1e-16,
@@ -186,10 +186,12 @@ def compute_discretized_neg_log_likelihood(
         a, b = params
         assert not np.isnan(a)
         assert not np.isnan(b)
-        if data.max() == 0:
+        if pass_i_at_1_arr.max() == 0:
             raise ValueError("Data is all zeros.")
 
-        cdf_values = scipy.stats.beta.cdf(bins, a, b, loc=0.0, scale=data.max())
+        cdf_values = scipy.stats.beta.cdf(
+            bins, a, b, loc=0.0, scale=pass_i_at_1_arr.max()
+        )
         prob_mass_per_bin = np.diff(cdf_values) + epsilon
     elif distribution == "continuous_bernoulli":
         lam = params
@@ -208,11 +210,11 @@ def compute_discretized_neg_log_likelihood(
         assert not np.isnan(a)
         assert not np.isnan(b)
 
-        # Normally, the CDF of the Kumaraswamy distribution is:
-        #   F(x) = 1 - (1 - x^a)^b
+        # The CDF of the rescaled Kumaraswamy distribution is:
+        #   F(x) = c * (1 - (1 - x^a)^b)
         # But we want to introduce a scale parameter, so we rescale the input to get the new CDF:
         #   F(x) = 1 - (1 - (x / scale)^a)^b
-        data = data / (data.max() + epsilon)
+        pass_i_at_1_arr = pass_i_at_1_arr / (pass_i_at_1_arr.max() + epsilon)
         cdf_values = 1.0 - np.power(1.0 - np.power(bins, a), b)
         prob_mass_per_bin = np.diff(cdf_values) + epsilon
 
@@ -227,7 +229,7 @@ def compute_discretized_neg_log_likelihood(
     log_prob_mass_per_bin = np.log(prob_mass_per_bin)
 
     # 2. Bin the data
-    num_data_per_bin = np.histogram(data, bins)[0]
+    num_data_per_bin = np.histogram(pass_i_at_1_arr, bins)[0]
 
     # 3. Compute the total log likelihood
     discretized_log_likelihood = np.mean(
@@ -243,7 +245,7 @@ def compute_discretized_neg_log_likelihood(
 
 
 def compute_failure_rate_at_k_attempts_under_beta_three_parameter_distribution(
-    k: int, alpha: float, beta: float, scale: float, dps: int = 50
+    k: int, alpha: float, beta: float, scale: float, dps: int = 100
 ) -> float:
     """
     Compute the integral using mpmath's high-precision integration.
@@ -263,26 +265,27 @@ def compute_failure_rate_at_k_attempts_under_beta_three_parameter_distribution(
         )
 
     try:
-        # Precompute constant factors (to avoid repeating in integrand)
-        denom = (scale ** (alpha + beta - 1)) * mpmath.beta(alpha, beta)
+        with mpmath.workdps(dps):
+            # Precompute constant factors (to avoid repeating in integrand)
+            denom = (scale ** (alpha + beta - 1)) * mpmath.beta(alpha, beta)
 
-        def integrand(p):
-            return (
-                (1.0 - p) ** k * p ** (alpha - 1.0) * (scale - p) ** (beta - 1.0)
-            ) / denom
+            def integrand(p):
+                return (
+                    (1.0 - p) ** k * p ** (alpha - 1.0) * (scale - p) ** (beta - 1.0)
+                ) / denom
 
-        integral = mpmath.quad(integrand, [0, scale])
-        if integral < 0.0 or integral >= 1.0:
-            raise ValueError(
-                f"Integral invalid! Integral: {integral}, k: {k}, alpha: {alpha}, beta: {beta}, scale: {scale}"
-            )
-        return float(integral)
+            integral = mpmath.quad(integrand, [0, scale])
+            if integral < 0.0 or integral >= 1.0:
+                raise ValueError(
+                    f"Integral invalid! Integral: {integral}, k: {k}, alpha: {alpha}, beta: {beta}, scale: {scale}"
+                )
+            return float(integral)
     except (ValueError, TypeError, mpmath.libmp.NoConvergence):
         return float("nan")
 
 
 def compute_failure_rate_at_k_attempts_under_kumaraswamy_three_parameter_distribution(
-    k: int, alpha: float, beta: float, scale: float
+    k: int, alpha: float, beta: float, scale: float, dps: int = 100
 ) -> float:
     """
     Compute the integral using mpquad's high-precision integration.
@@ -301,22 +304,23 @@ def compute_failure_rate_at_k_attempts_under_kumaraswamy_three_parameter_distrib
         )
 
     try:
-        # Precompute constant factors (to avoid repeating in integrand)
-        denom = mpmath.power(scale, alpha) / alpha / beta
+        with mpmath.workdps(dps):
+            # Precompute constant factors (to avoid repeating in integrand)
+            denom = mpmath.power(scale, alpha) / alpha / beta
 
-        def integrand(p):
-            return (
-                mpmath.power(1.0 - p, k)
-                * mpmath.power(p, alpha - 1.0)
-                * mpmath.power(1.0 - mpmath.power(p / scale, alpha), beta - 1.0)
-            ) / denom
+            def integrand(p):
+                return (
+                    mpmath.power(1.0 - p, k)
+                    * mpmath.power(p, alpha - 1.0)
+                    * mpmath.power(1.0 - mpmath.power(p / scale, alpha), beta - 1.0)
+                ) / denom
 
-        integral = mpmath.quad(integrand, [0, scale])
-        if integral < 0.0 or integral >= 1.0:
-            raise ValueError(
-                f"Integral invalid! Integral: {integral}, k: {k}, alpha: {alpha}, beta: {beta}, scale: {scale}"
-            )
-        return float(integral)
+            integral = mpmath.quad(integrand, [0, scale])
+            if integral < 0.0 or integral >= 1.0:
+                raise ValueError(
+                    f"Integral invalid! Integral: {integral}, k: {k}, alpha: {alpha}, beta: {beta}, scale: {scale}"
+                )
+            return float(integral)
     except (ValueError, TypeError, mpmath.libmp.NoConvergence):
         return float("nan")
 
@@ -340,7 +344,7 @@ def compute_kumaraswamy_binomial_three_parameters_distribution_neg_log_likelihoo
             return 0.0
 
         # Increase precision of 250 decimal digits.
-        with mpmath.workdps(250):
+        with mpmath.workdps(100):
             # binomial coefficient binom(n, x)
             binom_factor = mpmath.binomial(int(num_sample), int(num_success))
 
@@ -419,26 +423,31 @@ def compute_pass_at_k_from_num_samples_and_num_successes_df(
 
 def compute_scaling_exponent_from_distributional_fit(
     distributional_fit_df: pd.DataFrame,
-    distribution: str = "beta",
+    distribution: str,
     k_values: Optional[Union[np.ndarray, List[float]]] = None,
 ) -> pd.DataFrame:
     if k_values is None:
-        k_values = np.unique(np.logspace(0, 5, 20, dtype=int))
+        k_values = np.unique(np.logspace(0, 4, 20, dtype=int))
     if isinstance(k_values, list):
         k_values = np.array(k_values)
 
     if distribution == "beta_two_parameter":
         raise NotImplementedError
     elif distribution in {"beta_three_parameter", "kumaraswamy_three_parameter"}:
+        if distribution == "beta_three_parameter":
+            compute_failure_rate_at_k_fn = compute_failure_rate_at_k_attempts_under_beta_three_parameter_distribution
+        elif distribution == "kumaraswamy_three_parameter":
+            compute_failure_rate_at_k_fn = compute_failure_rate_at_k_attempts_under_kumaraswamy_three_parameter_distribution
+        else:
+            raise ValueError("How the hell did you end up here?")
+
         distributional_fit_df["Log Power Law Prefactor"] = np.nan
         distributional_fit_df["Power Law Prefactor"] = np.nan
         distributional_fit_df["Power Law Exponent"] = np.nan
         integral_values = np.zeros_like(k_values, dtype=np.float64)
         for row_idx in range(len(distributional_fit_df)):
             for k_idx, k in enumerate(k_values):
-                integral_values[
-                    k_idx
-                ] = compute_failure_rate_at_k_attempts_under_beta_three_parameter_distribution(
+                integral_values[k_idx] = compute_failure_rate_at_k_fn(
                     k=k,
                     alpha=distributional_fit_df["alpha"].values[row_idx],
                     beta=distributional_fit_df["beta"].values[row_idx],
@@ -1373,26 +1382,26 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
                     for idx in range(5)
                 ]
 
-                # for simulation_idx in np.arange(5, dtype=int):
-                #     individual_outcomes_per_problem_df = (
-                #         sample_synthetic_individual_outcomes_per_problem_df(
-                #             num_problems=1_000,
-                #             num_samples_per_problem=100_000,
-                #             distribution=true_distribution,
-                #             distribution_parameters=true_distribution_params,
-                #         )
-                #     )
-                #     df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
-                #         individual_outcomes_per_problem_df=individual_outcomes_per_problem_df,
-                #         num_repeats=1,
-                #     )
-                #     df["True Distribution"] = true_distribution_nice_str
-                #     df[
-                #         "True Distribution Asymptotic Power Law Exponent"
-                #     ] = true_asymptotic_power_law_exponent
-                #     df["Simulation Idx"] = simulation_idx
-                #     pprint.pprint(df)
-                #     scaling_exponents_dfs_list.append(df)
+                for simulation_idx in np.arange(5, dtype=int):
+                    individual_outcomes_per_problem_df = (
+                        sample_synthetic_individual_outcomes_per_problem_df(
+                            num_problems=1_000,
+                            num_samples_per_problem=100_000,
+                            distribution=true_distribution,
+                            distribution_parameters=true_distribution_params,
+                        )
+                    )
+                    df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
+                        individual_outcomes_per_problem_df=individual_outcomes_per_problem_df,
+                        num_repeats=1,
+                    )
+                    df["True Distribution"] = true_distribution_nice_str
+                    df[
+                        "True Distribution Asymptotic Power Law Exponent"
+                    ] = true_asymptotic_power_law_exponent
+                    df["Simulation Idx"] = simulation_idx
+                    pprint.pprint(df)
+                    scaling_exponents_dfs_list.append(df)
 
                 # Run simulations in parallel
                 # Run simulations in parallel
@@ -1443,6 +1452,180 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df(
 
 
 def create_or_load_cross_validated_synthetic_scaling_coefficient_data_df_helper(args):
+    """Function to run a single simulation that will be parallelized"""
+    # Unpack the arguments tuple
+    (
+        simulation_idx,
+        true_distribution,
+        true_distribution_params,
+        true_distribution_nice_str,
+        true_asymptotic_power_law_exponent,
+    ) = args
+
+    np.random.seed(simulation_idx)
+
+    individual_outcomes_per_problem_df = (
+        sample_synthetic_individual_outcomes_per_problem_df(
+            num_problems=1_000,
+            num_samples_per_problem=100_000,
+            distribution=true_distribution,
+            distribution_parameters=true_distribution_params,
+        )
+    )
+
+    df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
+        individual_outcomes_per_problem_df=individual_outcomes_per_problem_df,
+        num_repeats=5,
+    )
+
+    df["True Distribution"] = true_distribution_nice_str
+    df[
+        "True Distribution Asymptotic Power Law Exponent"
+    ] = true_asymptotic_power_law_exponent
+    df["Simulation Idx"] = simulation_idx
+    return df
+
+
+def create_or_load_cross_validated_synthetic_scaling_coefficient_discretized_data_df(
+    raw_data_dir=f"{os.getcwd()}/data/raw_data",
+    processed_data_dir=f"{os.getcwd()}/data/processed_data",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    synthetic_scaling_exponents_data_path = os.path.join(
+        processed_data_dir, "cv_synthetic_scaling_discretized_coefficient.parquet"
+    )
+
+    if refresh or not os.path.exists(synthetic_scaling_exponents_data_path):
+        print(f"Creating {synthetic_scaling_exponents_data_path} anew...")
+        os.makedirs(processed_data_dir, exist_ok=True)
+
+        # High level sketch:
+        # 2. Sweep over the number of samples per problem, computing pass_i@k for many k.
+        # 3. Fit the distributional parameters to the synthetic data.
+        # 4. Compute the scaling exponent from the distributional fits.
+
+        true_distribution_to_params_dict = {
+            "kumaraswamy": [
+                {"a": 0.2, "b": 1.5, "scale": 0.3},
+                {"a": 0.2, "b": 3.5, "scale": 0.3},
+                {"a": 0.05, "b": 1.5, "scale": 1.0},
+                {"a": 0.05, "b": 3.5, "scale": 1.0},
+            ],
+            "beta": [
+                {"a": 0.2, "b": 1.5, "scale": 0.3},
+                {"a": 0.2, "b": 3.5, "scale": 0.3},
+                {"a": 0.05, "b": 1.5, "scale": 1.0},
+                {"a": 0.05, "b": 3.5, "scale": 1.0},
+            ],
+        }
+
+        scaling_exponents_dfs_list = []
+        for true_distribution in true_distribution_to_params_dict:
+            for true_distribution_params in true_distribution_to_params_dict[
+                true_distribution
+            ]:
+                # 1. Generate synthetic data, sweeping over multiple true distributions and distributional parameters.
+                if true_distribution == "beta":
+                    true_asymptotic_power_law_exponent = true_distribution_params["a"]
+                    true_distribution_nice_str = f"Beta({true_distribution_params['a']}, {true_distribution_params['b']}, {true_distribution_params['scale']})"
+
+                elif true_distribution == "continuous_bernoulli":
+                    true_asymptotic_power_law_exponent = 1.0
+                    true_distribution_nice_str = (
+                        f"Continuous Bernoulli({true_distribution_params['lam']})"
+                    )
+                elif true_distribution == "kumaraswamy":
+                    true_asymptotic_power_law_exponent = true_distribution_params["a"]
+                    true_distribution_nice_str = f"Kumaraswamy({true_distribution_params['a']}, {true_distribution_params['b']}, {true_distribution_params['scale']})"
+                else:
+                    raise NotImplementedError(
+                        f"Unknown distribution: {true_distribution}"
+                    )
+
+                # Prepare arguments for each simulation
+                simulation_args = [
+                    (
+                        idx,
+                        true_distribution,
+                        true_distribution_params,
+                        true_distribution_nice_str,
+                        true_asymptotic_power_law_exponent,
+                    )
+                    for idx in range(5)
+                ]
+
+                for simulation_idx in np.arange(5, dtype=int):
+                    individual_outcomes_per_problem_df = (
+                        sample_synthetic_individual_outcomes_per_problem_df(
+                            num_problems=1_000,
+                            num_samples_per_problem=100_000,
+                            distribution=true_distribution,
+                            distribution_parameters=true_distribution_params,
+                        )
+                    )
+                    df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
+                        individual_outcomes_per_problem_df=individual_outcomes_per_problem_df,
+                        num_repeats=1,
+                    )
+                    df["True Distribution"] = true_distribution_nice_str
+                    df[
+                        "True Distribution Asymptotic Power Law Exponent"
+                    ] = true_asymptotic_power_law_exponent
+                    df["Simulation Idx"] = simulation_idx
+                    pprint.pprint(df)
+                    scaling_exponents_dfs_list.append(df)
+
+                # Run simulations in parallel
+                # Run simulations in parallel
+                with ProcessPoolExecutor(max_workers=16) as executor:
+                    # Map the simulation function directly to the arguments
+                    results = executor.map(
+                        create_or_load_cross_validated_synthetic_scaling_coefficient_discretized_data_df_helper,
+                        simulation_args,
+                    )
+                    for df in results:
+                        scaling_exponents_dfs_list.append(df)
+
+        synthetic_scaling_exponents_df = pd.concat(
+            scaling_exponents_dfs_list, ignore_index=True
+        ).reset_index(drop=True)
+
+        synthetic_scaling_exponents_df["Asymptotic Squared Error"] = 0.5 * np.square(
+            synthetic_scaling_exponents_df["Fit Power Law Exponent"]
+            - synthetic_scaling_exponents_df[
+                "True Distribution Asymptotic Power Law Exponent"
+            ]
+        )
+        synthetic_scaling_exponents_df["Asymptotic Relative Error"] = np.divide(
+            np.abs(
+                synthetic_scaling_exponents_df["Fit Power Law Exponent"]
+                - synthetic_scaling_exponents_df[
+                    "True Distribution Asymptotic Power Law Exponent"
+                ]
+            ),
+            synthetic_scaling_exponents_df[
+                "True Distribution Asymptotic Power Law Exponent"
+            ],
+        )
+        synthetic_scaling_exponents_df.to_parquet(
+            path=synthetic_scaling_exponents_data_path
+        )
+        del synthetic_scaling_exponents_df
+
+    synthetic_scaling_exponents_df = pd.read_parquet(
+        synthetic_scaling_exponents_data_path
+    )
+
+    print(
+        f"Loaded {synthetic_scaling_exponents_data_path} with shape: ",
+        synthetic_scaling_exponents_df.shape,
+    )
+    return synthetic_scaling_exponents_df
+
+
+def create_or_load_cross_validated_synthetic_scaling_coefficient_discretized_data_df_helper(
+    args,
+):
     """Function to run a single simulation that will be parallelized"""
     # Unpack the arguments tuple
     (
@@ -2416,7 +2599,7 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
         groupby_cols=["Placeholder"],
     )
 
-    # Note: These aren't actually the true parameters but we will treat them as true for our analysis.
+    # Note: These aren't actually the true parameters but we could treat them as "true" for our analyses.
     full_data_least_squares_power_law_prefactor = (
         least_sqrs_fitted_power_law_parameters_df["Power Law Prefactor"].values[0]
     )
@@ -2550,7 +2733,7 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
         groupby_cols=["Placeholder"],
     )
 
-    df_lst_sqrs_fit = pd.DataFrame(
+    lst_sqrs_predicted_power_law_parameters_df = pd.DataFrame(
         {
             "Num. Problems": num_problems,
             "Num. Samples per Problem": [num_samples_per_problem],
@@ -2569,7 +2752,6 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
         }
     )
 
-    # Method 2: Distributional fit to pass_i@1.
     subset_individual_outcomes_per_problem_df = individual_outcomes_per_problem_df[
         (
             individual_outcomes_per_problem_df["Problem Idx"].isin(
@@ -2589,35 +2771,61 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
         )
     )
 
-    subset_kumaraswamy_binomial_mle_df = pd.DataFrame(
-        src.analyze.fit_kumaraswamy_binomial_three_parameters_to_num_samples_and_num_successes(
+    # Method 2: Distributional fit to pass_i@1 using Discretized Beta MLE.
+    subset_discretized_beta_mle_df = pd.DataFrame(
+        src.analyze.fit_discretized_beta_three_parameters_to_num_samples_and_num_successes(
             num_samples_and_num_successes_df=subset_num_samples_and_num_successes_df
         )
     ).T
-
-    # Add power law exponent numerically.
-    subset_kumaraswamy_binomial_mle_df = (
+    subset_discretized_beta_mle_df = (
         src.analyze.compute_scaling_exponent_from_distributional_fit(
-            distributional_fit_df=subset_kumaraswamy_binomial_mle_df,
+            distributional_fit_df=subset_discretized_beta_mle_df,
             distribution="beta_three_parameter",
         )
     )
-
-    df_kumaraswamy_binomial_fit = pd.DataFrame(
+    discretized_beta_predicted_power_law_parameters_df = pd.DataFrame(
         {
             "Num. Problems": num_problems,
             "Num. Samples per Problem": [num_samples_per_problem],
             "Fit Power Law Prefactor": [
-                subset_kumaraswamy_binomial_mle_df["Power Law Prefactor"].values[0]
+                subset_discretized_beta_mle_df["Power Law Prefactor"].values[0]
             ],
             "Fit Power Law Exponent": [
-                subset_kumaraswamy_binomial_mle_df["Power Law Exponent"].values[0]
+                subset_discretized_beta_mle_df["Power Law Exponent"].values[0]
             ],
-            "Fit Method": "Kumaraswamy-Binomial",
+            "Fit Method": "Discretized Beta",
             "Repeat Index": [repeat_idx],
         }
     )
 
+    # Method 3: Distributional fit to pass_i@1 using Discretized Kumaraswamy MLE.
+    subset_discretized_kumaraswamy_mle_df = pd.DataFrame(
+        src.analyze.fit_discretized_kumaraswamy_three_parameters_to_num_samples_and_num_successes(
+            num_samples_and_num_successes_df=subset_num_samples_and_num_successes_df
+        )
+    ).T
+    subset_discretized_kumaraswamy_mle_df = (
+        src.analyze.compute_scaling_exponent_from_distributional_fit(
+            distributional_fit_df=subset_discretized_kumaraswamy_mle_df,
+            distribution="kumaraswamy_three_parameter",
+        )
+    )
+    discretized_kumaraswamy_predicted_power_law_parameters_df = pd.DataFrame(
+        {
+            "Num. Problems": num_problems,
+            "Num. Samples per Problem": [num_samples_per_problem],
+            "Fit Power Law Prefactor": [
+                subset_discretized_kumaraswamy_mle_df["Power Law Prefactor"].values[0]
+            ],
+            "Fit Power Law Exponent": [
+                subset_discretized_kumaraswamy_mle_df["Power Law Exponent"].values[0]
+            ],
+            "Fit Method": "Discretized Kumaraswamy",
+            "Repeat Index": [repeat_idx],
+        }
+    )
+
+    # Method 4: Distributional fit to pass_i@1 using Beta Binomial MLE.
     subset_beta_binomial_mle_df = pd.DataFrame(
         src.analyze.fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
             num_samples_and_num_successes_df=subset_num_samples_and_num_successes_df
@@ -2632,7 +2840,7 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
         )
     )
 
-    df_beta_binomial_fit = pd.DataFrame(
+    beta_binomial_predicted_power_law_parameters_df = pd.DataFrame(
         {
             "Num. Problems": num_problems,
             "Num. Samples per Problem": [num_samples_per_problem],
@@ -2643,6 +2851,34 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
                 subset_beta_binomial_mle_df["Power Law Exponent"].values[0]
             ],
             "Fit Method": "Beta-Binomial",
+            "Repeat Index": [repeat_idx],
+        }
+    )
+
+    # Method 5: Distributional fit to pass_i@1 using Kumaraswamy Binomial MLE.
+    subset_kumaraswamy_binomial_mle_df = pd.DataFrame(
+        src.analyze.fit_kumaraswamy_binomial_three_parameters_to_num_samples_and_num_successes(
+            num_samples_and_num_successes_df=subset_num_samples_and_num_successes_df,
+            maxiter=5,
+        )
+    ).T
+    subset_kumaraswamy_binomial_mle_df = (
+        src.analyze.compute_scaling_exponent_from_distributional_fit(
+            distributional_fit_df=subset_kumaraswamy_binomial_mle_df,
+            distribution="kumaraswamy_three_parameter",
+        )
+    )
+    kumaraswamy_binomial_predicted_power_law_parameters_df = pd.DataFrame(
+        {
+            "Num. Problems": num_problems,
+            "Num. Samples per Problem": [num_samples_per_problem],
+            "Fit Power Law Prefactor": [
+                subset_kumaraswamy_binomial_mle_df["Power Law Prefactor"].values[0]
+            ],
+            "Fit Power Law Exponent": [
+                subset_kumaraswamy_binomial_mle_df["Power Law Exponent"].values[0]
+            ],
+            "Fit Method": "Kumaraswamy-Binomial",
             "Repeat Index": [repeat_idx],
         }
     )
@@ -2686,9 +2922,16 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
     # Columns: Num. Problems, Num. Samples per Problem, Fit Power Law Prefactor, Fit Power Law Exponent, Fit Method, Repeat Index
     # 3 Rows: Least Squares, Kumaraswamy-Binomial, Beta-Binomial
     result_df = pd.concat(
-        [df_lst_sqrs_fit, df_kumaraswamy_binomial_fit, df_beta_binomial_fit],
+        [
+            lst_sqrs_predicted_power_law_parameters_df,
+            discretized_beta_predicted_power_law_parameters_df,
+            discretized_kumaraswamy_predicted_power_law_parameters_df,
+            kumaraswamy_binomial_predicted_power_law_parameters_df,
+            beta_binomial_predicted_power_law_parameters_df,
+        ],
         ignore_index=True,
     )
+
     return result_df
 
 
@@ -2953,9 +3196,126 @@ def fit_beta_negative_binomial_three_parameters_to_num_samples_and_num_successes
     return result
 
 
+def fit_discretized_beta_three_parameters_to_num_samples_and_num_successes(
+    num_samples_and_num_successes_df: pd.DataFrame,
+    resolution: float = 1e-4,
+    initial_params: Tuple[float, float] = (0.5, 3.5),
+    bounds: Tuple[Tuple[float, float]] = ((0.01, 100), (0.01, 100)),
+    num_windows_per_factor_of_10: int = 10,
+    maxiter: int = 5000,
+) -> pd.Series:
+    smallest_nonzero_pass_at_1 = resolution
+    log10_smallest_nonzero_pass_at_1 = np.log10(smallest_nonzero_pass_at_1)
+    log_bins = np.logspace(
+        log10_smallest_nonzero_pass_at_1,
+        0,
+        -int(log10_smallest_nonzero_pass_at_1) * num_windows_per_factor_of_10 + 1,
+    )
+    small_value_for_plotting = smallest_nonzero_pass_at_1 / 2.0
+    bins = np.concatenate(
+        [[-small_value_for_plotting], [small_value_for_plotting], log_bins]
+    )
+    bins[0] = 0.0
+    pass_i_at_1_arr = (
+        num_samples_and_num_successes_df["Num. Samples Correct"]
+        / num_samples_and_num_successes_df["Num. Samples Total"]
+    ).values
+    assert pass_i_at_1_arr.min() >= bins[0]
+    assert (pass_i_at_1_arr.max() < bins[-1]) or pass_i_at_1_arr.max() == 1.0
+
+    # Maximize the log likelihood by minimizing its negative
+    optimize_result = scipy.optimize.minimize(
+        lambda params: compute_discretized_neg_log_likelihood(
+            params, pass_i_at_1_arr=pass_i_at_1_arr, bins=bins, distribution="beta"
+        ),
+        x0=initial_params,
+        bounds=bounds,
+        method="L-BFGS-B",
+        options=dict(
+            maxiter=maxiter,
+            maxls=400,
+            gtol=1e-6,  # Gradient tolerance, adjust as needed),
+            ftol=1e-6,
+        ),
+    )
+
+    result = pd.Series(
+        {
+            "alpha": optimize_result.x[0],
+            "beta": optimize_result.x[1],
+            "loc": 0.0,
+            "scale": pass_i_at_1_arr.max(),
+            "neg_log_likelihood": optimize_result.fun,
+        }
+    )
+
+    return result
+
+
+def fit_discretized_kumaraswamy_three_parameters_to_num_samples_and_num_successes(
+    num_samples_and_num_successes_df: pd.DataFrame,
+    resolution: float = 1e-4,
+    initial_params: Tuple[float, float] = (0.9, 5.1),
+    bounds: Tuple[Tuple[float, float]] = ((0.01, 100), (0.01, 100)),
+    num_windows_per_factor_of_10: int = 10,
+) -> pd.Series:
+    smallest_nonzero_pass_at_1 = resolution
+    log10_smallest_nonzero_pass_at_1 = np.log10(smallest_nonzero_pass_at_1)
+    log_bins = np.logspace(
+        log10_smallest_nonzero_pass_at_1,
+        0,
+        -int(log10_smallest_nonzero_pass_at_1) * num_windows_per_factor_of_10 + 1,
+    )
+    small_value_for_plotting = smallest_nonzero_pass_at_1 / 2.0
+    bins = np.concatenate(
+        [[-small_value_for_plotting], [small_value_for_plotting], log_bins]
+    )
+    bins[0] = 0.0
+    pass_i_at_1_arr = (
+        num_samples_and_num_successes_df["Num. Samples Correct"]
+        / num_samples_and_num_successes_df["Num. Samples Total"]
+    ).values
+    assert pass_i_at_1_data.min() >= bins[0]
+    assert pass_i_at_1_data.max() < bins[-1]
+
+    # Maximize the log likelihood by minimizing its negative
+    optimize_result = scipy.optimize.minimize(
+        lambda params: compute_discretized_neg_log_likelihood(
+            params,
+            pass_i_at_1_arr=pass_i_at_1_data,
+            bins=bins,
+            distribution="kumaraswamy",
+        ),
+        x0=initial_params,
+        bounds=bounds,
+        method="L-BFGS-B",
+        options=dict(
+            maxiter=5000,
+            maxls=400,
+            gtol=1e-6,  # Gradient tolerance, adjust as needed),
+            ftol=1e-6,
+        ),
+    )
+
+    result = pd.Series(
+        {
+            "a": optimize_result.x[0],
+            "b": optimize_result.x[1],
+            "loc": 0.0,
+            "scale": pass_i_at_1_data.max(),
+            "neg_log_likelihood": optimize_result.fun,
+            "aic": 2 * len(initial_params) + 2 * optimize_result.fun,
+            "bic": len(initial_params) * np.log(len(pass_i_at_1_data))
+            + 2 * optimize_result.fun,
+        }
+    )
+
+    return result
+
+
 def fit_kumaraswamy_binomial_three_parameters_to_num_samples_and_num_successes(
     num_samples_and_num_successes_df: pd.DataFrame,
-    maxiter: int = 1000,
+    maxiter: int = 5,
     epsilon: Optional[float] = 1e-6,
 ) -> pd.Series:
     num_data = len(num_samples_and_num_successes_df)
@@ -2987,7 +3347,7 @@ def fit_kumaraswamy_binomial_three_parameters_to_num_samples_and_num_successes(
     # Make sure that scale isn't more than 1.0 + epsilon.
     scale = min(scale, 1.0)
 
-    # Start with reasonable initial alpha, beta.
+    # Start with rough initial alpha, beta.
     try:
         alpha, beta, _, _ = scipy.stats.beta.fit(
             np.clip(
@@ -2997,6 +3357,7 @@ def fit_kumaraswamy_binomial_three_parameters_to_num_samples_and_num_successes(
             fscale=scale,  # Force the scale to be the max scale.
         )
     except scipy.stats._continuous_distns.FitSolverError:
+        # If fitting error, fall back.
         alpha = 0.35
         beta = 3.5
     initial_params = (alpha, beta)
@@ -3020,7 +3381,7 @@ def fit_kumaraswamy_binomial_three_parameters_to_num_samples_and_num_successes(
         method="L-BFGS-B",
         options=dict(
             maxiter=maxiter,
-            maxls=400,
+            maxls=200,
             gtol=1e-6,  # Gradient tolerance, adjust as needed),
             ftol=1e-6,
         ),
@@ -3040,113 +3401,6 @@ def fit_kumaraswamy_binomial_three_parameters_to_num_samples_and_num_successes(
             "success": "Success" if optimize_result.success else "Failure",
         }
     )
-    return result
-
-
-def fit_pass_at_1_discretized_beta_distribution_parameters(
-    data: np.ndarray,
-    resolution: float = 1e-4,
-    initial_params: Tuple[float, float] = (0.9, 5.1),
-    bounds: Tuple[Tuple[float, float]] = ((0.01, 100), (0.01, 100)),
-    num_windows_per_factor_of_10: int = 10,
-) -> pd.Series:
-    smallest_nonzero_pass_at_1 = resolution
-    log10_smallest_nonzero_pass_at_1 = np.log10(smallest_nonzero_pass_at_1)
-    log_bins = np.logspace(
-        log10_smallest_nonzero_pass_at_1,
-        0,
-        -int(log10_smallest_nonzero_pass_at_1) * num_windows_per_factor_of_10 + 1,
-    )
-    small_value_for_plotting = smallest_nonzero_pass_at_1 / 2.0
-    bins = np.concatenate(
-        [[-small_value_for_plotting], [small_value_for_plotting], log_bins]
-    )
-    bins[0] = 0.0
-    assert data.min() >= bins[0]
-    assert (data.max() < bins[-1]) or data.max() == 1.0
-
-    # Maximize the log likelihood by minimizing its negative
-    optimize_result = scipy.optimize.minimize(
-        lambda params: compute_discretized_neg_log_likelihood(
-            params, data=data, bins=bins, distribution="beta"
-        ),
-        x0=initial_params,
-        bounds=bounds,
-        method="L-BFGS-B",
-        options=dict(
-            maxiter=5000,
-            maxls=400,
-            gtol=1e-6,  # Gradient tolerance, adjust as needed),
-            ftol=1e-6,
-        ),
-    )
-
-    result = pd.Series(
-        {
-            "alpha": optimize_result.x[0],
-            "beta": optimize_result.x[1],
-            "loc": 0.0,
-            "scale": data.max(),
-            "neg_log_likelihood": optimize_result.fun,
-            "aic": 2 * len(initial_params) + 2 * optimize_result.fun,
-            "bic": len(initial_params) * np.log(len(data)) + 2 * optimize_result.fun,
-        }
-    )
-
-    return result
-
-
-def fit_pass_at_1_discretized_kumaraswamy_distribution_parameters(
-    pass_i_at_1_data: np.ndarray,  # Shape: (num of problems,)
-    resolution: float = 1e-4,
-    initial_params: Tuple[float, float] = (0.9, 5.1),
-    bounds: Tuple[Tuple[float, float]] = ((0.01, 100), (0.01, 100)),
-    num_windows_per_factor_of_10: int = 10,
-) -> pd.Series:
-    smallest_nonzero_pass_at_1 = resolution
-    log10_smallest_nonzero_pass_at_1 = np.log10(smallest_nonzero_pass_at_1)
-    log_bins = np.logspace(
-        log10_smallest_nonzero_pass_at_1,
-        0,
-        -int(log10_smallest_nonzero_pass_at_1) * num_windows_per_factor_of_10 + 1,
-    )
-    small_value_for_plotting = smallest_nonzero_pass_at_1 / 2.0
-    bins = np.concatenate(
-        [[-small_value_for_plotting], [small_value_for_plotting], log_bins]
-    )
-    bins[0] = 0.0
-    assert pass_i_at_1_data.min() >= bins[0]
-    assert pass_i_at_1_data.max() < bins[-1]
-
-    # Maximize the log likelihood by minimizing its negative
-    optimize_result = scipy.optimize.minimize(
-        lambda params: compute_discretized_neg_log_likelihood(
-            params, data=pass_i_at_1_data, bins=bins, distribution="kumaraswamy"
-        ),
-        x0=initial_params,
-        bounds=bounds,
-        method="L-BFGS-B",
-        options=dict(
-            maxiter=5000,
-            maxls=400,
-            gtol=1e-6,  # Gradient tolerance, adjust as needed),
-            ftol=1e-6,
-        ),
-    )
-
-    result = pd.Series(
-        {
-            "a": optimize_result.x[0],
-            "b": optimize_result.x[1],
-            "loc": 0.0,
-            "scale": pass_i_at_1_data.max(),
-            "neg_log_likelihood": optimize_result.fun,
-            "aic": 2 * len(initial_params) + 2 * optimize_result.fun,
-            "bic": len(initial_params) * np.log(len(pass_i_at_1_data))
-            + 2 * optimize_result.fun,
-        }
-    )
-
     return result
 
 
