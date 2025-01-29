@@ -360,18 +360,19 @@ FIT_AND_SCORE_ESTIMATORS_DEFAULT_CONFIG = {
     #     "Modality": "Text",
     #     "Temperature": 1.0,
     # },
-    # "dataset_name": "large_language_monkeys_pythia_math",
-    # "dataset_kwargs": {
-    #     "Benchmark": "MATH",
-    #     "Model": "Pythia 70M",
-    #     # "Modality": "text",
-    #     # "Temperature": 1.0,
-    # },
-    "dataset_name": "synthetic",
-    "dataset_kwargs": {"distribution": "kumaraswamy", "a": 0.2, "b": 1.5, "scale": 0.3},
+    "dataset_name": "large_language_monkeys_pythia_math",
+    "dataset_kwargs": {
+        "Benchmark": "MATH",
+        "Model": "Pythia 70M",
+        # "Modality": "text",
+        # "Temperature": 1.0,
+    },
+    # "dataset_name": "synthetic",
+    # "dataset_kwargs": {"distribution": "kumaraswamy", "a": 0.2, "b": 1.5, "scale": 0.3},
     "num_problems": 64,
     "num_samples_per_problem": 100,
-    "seed": 0,
+    # "seed": 0,
+    "seed": 3,
 }
 
 LARGE_LANGUAGE_MONKEYS_BENCHMARKS_TO_NICE_STRINGS = {"gsm8k": "GSM8K", "math": "MATH"}

@@ -2789,22 +2789,28 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
             num_samples_and_num_successes_df=subset_num_samples_and_num_successes_df
         )
     ).T
-    subset_discretized_beta_mle_df = (
-        src.analyze.compute_scaling_exponent_from_distributional_fit(
-            distributional_fit_df=subset_discretized_beta_mle_df,
-            distribution="beta_three_parameter",
+    if not subset_discretized_beta_mle_df["success"].values[0].startswith("Failure"):
+        subset_discretized_beta_mle_df = (
+            src.analyze.compute_scaling_exponent_from_distributional_fit(
+                distributional_fit_df=subset_discretized_beta_mle_df,
+                distribution="beta_three_parameter",
+            )
         )
-    )
+        fit_power_law_prefactor = subset_discretized_beta_mle_df[
+            "Power Law Prefactor"
+        ].values[0]
+        fit_power_law_exponent = subset_discretized_beta_mle_df[
+            "Power Law Exponent"
+        ].values[0]
+    else:
+        fit_power_law_prefactor = np.nan
+        fit_power_law_exponent = np.nan
     discretized_beta_predicted_power_law_parameters_df = pd.DataFrame(
         {
             "Num. Problems": num_problems,
             "Num. Samples per Problem": [num_samples_per_problem],
-            "Fit Power Law Prefactor": [
-                subset_discretized_beta_mle_df["Power Law Prefactor"].values[0]
-            ],
-            "Fit Power Law Exponent": [
-                subset_discretized_beta_mle_df["Power Law Exponent"].values[0]
-            ],
+            "Fit Power Law Prefactor": [fit_power_law_prefactor],
+            "Fit Power Law Exponent": [fit_power_law_exponent],
             "Fit Method": "Discretized Beta",
             "Repeat Index": [repeat_idx],
         }
@@ -2816,22 +2822,29 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
             num_samples_and_num_successes_df=subset_num_samples_and_num_successes_df
         )
     ).T
-    subset_discretized_kumaraswamy_mle_df = (
-        src.analyze.compute_scaling_exponent_from_distributional_fit(
-            distributional_fit_df=subset_discretized_kumaraswamy_mle_df,
-            distribution="kumaraswamy_three_parameter",
+    if not subset_discretized_beta_mle_df["success"].values[0].startswith("Failure"):
+        subset_discretized_kumaraswamy_mle_df = (
+            src.analyze.compute_scaling_exponent_from_distributional_fit(
+                distributional_fit_df=subset_discretized_kumaraswamy_mle_df,
+                distribution="kumaraswamy_three_parameter",
+            )
         )
-    )
+        fit_power_law_prefactor = subset_discretized_kumaraswamy_mle_df[
+            "Power Law Prefactor"
+        ].values[0]
+        fit_power_law_exponent = subset_discretized_kumaraswamy_mle_df[
+            "Power Law Exponent"
+        ].values[0]
+    else:
+        fit_power_law_prefactor = np.nan
+        fit_power_law_exponent = np.nan
+
     discretized_kumaraswamy_predicted_power_law_parameters_df = pd.DataFrame(
         {
             "Num. Problems": num_problems,
             "Num. Samples per Problem": [num_samples_per_problem],
-            "Fit Power Law Prefactor": [
-                subset_discretized_kumaraswamy_mle_df["Power Law Prefactor"].values[0]
-            ],
-            "Fit Power Law Exponent": [
-                subset_discretized_kumaraswamy_mle_df["Power Law Exponent"].values[0]
-            ],
+            "Fit Power Law Prefactor": [fit_power_law_prefactor],
+            "Fit Power Law Exponent": [fit_power_law_exponent],
             "Fit Method": "Discretized Kumaraswamy",
             "Repeat Index": [repeat_idx],
         }
