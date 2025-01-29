@@ -359,7 +359,7 @@ FIT_AND_SCORE_ESTIMATORS_DEFAULT_CONFIG = {
         "Benchmark": "MATH",
         "Model": "Pythia 70M",
         # "Modality": "text",
-        "Temperature": 1.0,
+        # "Temperature": 1.0,
     },
     "num_problems": 64,
     "num_samples_per_problem": 100,

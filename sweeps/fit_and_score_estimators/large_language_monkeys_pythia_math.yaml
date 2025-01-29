@@ -4,16 +4,26 @@ project: monkey-power-law-estimators
 method: grid
 parameters:
   dataset_name:
-    values: [ "bon_jailbreaking_text" ]
+    values: [ "large_language_monkeys_pythia_math" ]
   data_config:
     parameters:
-      init_sampling_distribution:
+      Benchmark:
         values: [
-          "uniform"
+          "MATH"
         ]
-  num_outcomes:
-    values: [10, 100, 1000, 10000, 100000]
+      Model:
+        values: [
+          "Pythia 70M",
+          "Pythia 160M",
+          "Pythia 410M",
+          "Pythia 1B",
+          "Pythia 2.8B",
+          "Pythia 6.9B",
+          "Pythia 12B",
+        ]
+  num_problems:
+    values: [64, 128]
   num_samples_per_iteration:
-    values: [ 10, 100, 1000, 10000, 100000 ]
+    values: [ 100, 316, 1000, 3162, 10000]
   seed:
-    values: [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    values: [ 0, 1, 2, 3, 4]

@@ -4,13 +4,10 @@ project: monkey-power-law-estimators
 method: grid
 parameters:
   dataset_name:
-    values: [ "large_language_monkeys_pythia_math" ]
+    values: [ "bon_jailbreaking_text" ]
   data_config:
     parameters:
-      init_sampling_distribution:
-        values: [
-          "uniform"
-        ]
+
   num_outcomes:
     values: [10, 100, 1000, 10000, 100000]
   num_samples_per_iteration:

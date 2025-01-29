@@ -110,7 +110,10 @@ def fit_and_score_estimators():
             ks,
             -data_to_log["Full Data Least Squares Power Law Exponent"],
         ),
-        label="Lst Sqr (All)",
+        label="Lst Sqr (All) (a={:0.3f}, b={:0.3f})".format(
+            data_to_log["Full Data Least Squares Power Law Prefactor"],
+            data_to_log["Full Data Least Squares Power Law Exponent"],
+        ),
     )
     plt.plot(
         ks,
@@ -119,7 +122,10 @@ def fit_and_score_estimators():
             ks,
             -data_to_log["Least Squares Power Law Exponent"],
         ),
-        label="Lst Sqr",
+        label="Lst Sqr (a={:0.3f}, b={:0.3f})".format(
+            data_to_log["Least Squares Power Law Prefactor"],
+            data_to_log["Least Squares Power Law Exponent"],
+        ),
     )
     plt.plot(
         ks,
@@ -128,7 +134,10 @@ def fit_and_score_estimators():
             ks,
             -data_to_log["Beta-Binomial Power Law Exponent"],
         ),
-        label="BetaBin",
+        label="BetaBin (a={:0.3f}, b={:0.3f})".format(
+            data_to_log["Beta-Binomial Power Law Prefactor"],
+            data_to_log["Beta-Binomial Power Law Exponent"],
+        ),
     )
     plt.plot(
         ks,
@@ -137,7 +146,10 @@ def fit_and_score_estimators():
             ks,
             -data_to_log["Discretized Beta Power Law Exponent"],
         ),
-        label="DiscrBeta",
+        label="DiscrBeta (a={:0.3f}, b={:0.3f})".format(
+            data_to_log["Discretized Beta Power Law Prefactor"],
+            data_to_log["Discretized Beta Power Law Exponent"],
+        ),
     )
     plt.plot(
         ks,
@@ -146,7 +158,10 @@ def fit_and_score_estimators():
             ks,
             -data_to_log["Kumaraswamy-Binomial Power Law Exponent"],
         ),
-        label="KumarBin",
+        label="KumarBin (a={:0.3f}, b={:0.3f})".format(
+            data_to_log["Kumaraswamy-Binomial Power Law Prefactor"],
+            data_to_log["Kumaraswamy-Binomial Power Law Exponent"],
+        ),
     )
     plt.plot(
         ks,
@@ -155,7 +170,10 @@ def fit_and_score_estimators():
             ks,
             -data_to_log["Discretized Kumaraswamy Power Law Exponent"],
         ),
-        label="DiscrKumar",
+        label="DiscrKumar (a={:0.3f}, b={:0.3f})".format(
+            data_to_log["Discretized Kumaraswamy Power Law Prefactor"],
+            data_to_log["Discretized Kumaraswamy Power Law Exponent"],
+        ),
     )
     plt.axvline(config["num_samples_per_problem"], linestyle="--", color="k")
     plt.xlabel("Num. Attempts per Problem $k$")
@@ -166,8 +184,8 @@ def fit_and_score_estimators():
     plt.tight_layout()
     wandb_image = wandb.Image(plt.gcf())
     wandb.log({"estimators_y=neg_log_pass_D_at_k_x=k": wandb_image}, step=1)
-    plt.show()
-
+    # plt.show()
+    plt.close()
     wandb.finish()
 
 
