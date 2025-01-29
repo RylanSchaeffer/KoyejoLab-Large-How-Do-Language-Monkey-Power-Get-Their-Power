@@ -7,3 +7,4 @@ data/raw_data/many_shot_jailbreaking/task_scary_evals_psychopathy__max_num_shots
 data/raw_data/many_shot_jailbreaking/task_scary_evals_psychopathy__max_num_shots_300__num_examples_600.pkl
 
 tmp*.py
+wandb/
