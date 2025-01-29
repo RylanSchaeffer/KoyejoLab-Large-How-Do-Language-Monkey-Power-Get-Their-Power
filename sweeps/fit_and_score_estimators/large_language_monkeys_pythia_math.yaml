@@ -5,7 +5,7 @@ method: grid
 parameters:
   dataset_name:
     values: [ "large_language_monkeys_pythia_math" ]
-  data_config:
+  dataset_kwargs:
     parameters:
       Benchmark:
         values: [
@@ -23,7 +23,7 @@ parameters:
         ]
   num_problems:
     values: [64, 128]
-  num_samples_per_iteration:
+  num_samples_per_problem:
     values: [ 100, 316, 1000, 3162, 10000]
   seed:
     values: [ 0, 1, 2, 3, 4]

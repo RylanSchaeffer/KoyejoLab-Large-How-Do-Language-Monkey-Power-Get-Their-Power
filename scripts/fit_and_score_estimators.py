@@ -21,9 +21,10 @@ def fit_and_score_estimators():
     np.random.seed(config["seed"])
 
     # Load the individual outcomes per problem.
-    if config["dataset_name"] == "bon_jailbreaking_text_scaling":
+    if config["dataset_name"] == "bon_jailbreaking_text":
         assert "Model" in config["dataset_kwargs"]
         assert "Modality" in config["dataset_kwargs"]
+        assert "Temperature" in config["dataset_kwargs"]
         individual_outcomes_per_problem_df = (
             src.analyze.create_or_load_bon_jailbreaking_text_individual_outcomes_df(
                 refresh=False
@@ -34,7 +35,7 @@ def fit_and_score_estimators():
             individual_outcomes_per_problem_df["Model"]
             == config["dataset_kwargs"]["Model"]
         ]
-        # Subset to only this dataset.
+        # Subset to only this modality.
         individual_outcomes_per_problem_df = individual_outcomes_per_problem_df[
             individual_outcomes_per_problem_df["Modality"]
             == config["dataset_kwargs"]["Modality"]
@@ -189,20 +190,6 @@ def fit_and_score_estimators():
     wandb.finish()
 
 
-def fit_proportions_from_observations(
-    observations: np.ndarray, num_outcomes: int
-) -> np.ndarray:
-    """
-    Estimate the distribution over O outcomes given 'data'
-    where each entry in 'data' is an integer in [0, O-1].
-    Returns a vector of length O with empirical frequencies.
-    """
-    counts = np.bincount(observations, minlength=num_outcomes)
-    total = counts.sum()
-    assert total > 0, "No data to fit distribution!"
-    return counts / total
-
-
 if __name__ == "__main__":
     fit_and_score_estimators()
-    print("Finished discrete distribution simulation!")
+    print("Finished fit_and_score_estimators!")

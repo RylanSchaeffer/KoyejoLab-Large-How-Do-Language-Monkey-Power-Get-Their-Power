@@ -354,13 +354,19 @@ CAUSAL_LANGUAGE_MODELING_DATASETS_ORDER = [
 ]
 
 FIT_AND_SCORE_ESTIMATORS_DEFAULT_CONFIG = {
-    "dataset_name": "large_language_monkeys_pythia_math",
+    "dataset_name": "bon_jailbreaking_text",
     "dataset_kwargs": {
-        "Benchmark": "MATH",
-        "Model": "Pythia 70M",
-        # "Modality": "text",
-        # "Temperature": 1.0,
+        "Model": "GPT4o",
+        "Modality": "Text",
+        "Temperature": 1.0,
     },
+    # "dataset_name": "large_language_monkeys_pythia_math",
+    # "dataset_kwargs": {
+    #     "Benchmark": "MATH",
+    #     "Model": "Pythia 70M",
+    #     # "Modality": "text",
+    #     # "Temperature": 1.0,
+    # },
     "num_problems": 64,
     "num_samples_per_problem": 100,
     "seed": 0,
