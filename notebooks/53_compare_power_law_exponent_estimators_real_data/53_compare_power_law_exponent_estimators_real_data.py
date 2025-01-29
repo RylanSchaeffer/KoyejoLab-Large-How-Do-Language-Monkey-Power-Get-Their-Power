@@ -19,10 +19,10 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
     refresh=False,
 )
 
-# bon_jailbreaking_text_cross_validated_scaling_coeff_df = src.analyze.create_or_load_cross_validated_bon_jailbreaking_text_scaling_coefficient_data_df(
-#     # refresh=False,
-#     refresh=True,
-# )
+bon_jailbreaking_text_cross_validated_scaling_coeff_df = src.analyze.create_or_load_cross_validated_bon_jailbreaking_text_scaling_coefficient_data_df(
+    # refresh=False,
+    refresh=True,
+)
 
 # Load backtested scaling coefficient fits.
 llmonkeys_pythia_math_cross_validated_scaling_coeff_df = src.analyze.create_or_load_cross_validated_large_language_monkey_pythia_math_scaling_coefficient_data_df(

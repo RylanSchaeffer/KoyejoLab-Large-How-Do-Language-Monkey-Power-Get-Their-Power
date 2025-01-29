@@ -1,0 +1,19 @@
+program: scripts/fit_and_score_estimators.py
+entity: rylan
+project: monkey-power-law-estimators
+method: grid
+parameters:
+  dataset_name:
+    values: [ "bon_jailbreaking_text" ]
+  data_config:
+    parameters:
+      init_sampling_distribution:
+        values: [
+          "uniform"
+        ]
+  num_outcomes:
+    values: [10, 100, 1000, 10000, 100000]
+  num_samples_per_iteration:
+    values: [ 10, 100, 1000, 10000, 100000 ]
+  seed:
+    values: [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
