@@ -55,7 +55,19 @@ def fit_and_score_estimators():
             == config["dataset_kwargs"]["Benchmark"]
         ]
     elif config["dataset_name"] == "synthetic":
-        raise NotImplementedError
+        individual_outcomes_per_problem_df = (
+            src.analyze.sample_synthetic_individual_outcomes_per_problem_df(
+                num_problems=1_000,
+                num_samples_per_problem=100_000,
+                distribution=config["dataset_kwargs"]["distribution"],
+                distribution_parameters={
+                    "a": config["dataset_kwargs"]["a"],
+                    "b": config["dataset_kwargs"]["b"],
+                    "loc": 0.0,
+                    "scale": config["dataset_kwargs"]["scale"],
+                },
+            )
+        )
     else:
         raise NotImplementedError
 

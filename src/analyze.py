@@ -1610,10 +1610,10 @@ def create_or_load_cross_validated_synthetic_scaling_coefficient_discretized_dat
                             distribution_parameters=true_distribution_params,
                         )
                     )
-                    df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
-                        individual_outcomes_per_problem_df=individual_outcomes_per_problem_df,
-                        num_repeats=1,
-                    )
+                    # df = cross_validate_power_law_coefficient_estimators_from_individual_outcomes(
+                    #     individual_outcomes_per_problem_df=individual_outcomes_per_problem_df,
+                    #     num_repeats_list=1,
+                    # )
                     df["True Distribution"] = true_distribution_nice_str
                     df[
                         "True Distribution Asymptotic Power Law Exponent"
