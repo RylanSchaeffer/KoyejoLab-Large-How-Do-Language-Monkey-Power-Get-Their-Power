@@ -24,6 +24,6 @@ parameters:
   num_problems:
     values: [64, 128]
   num_samples_per_problem:
-    values: [ 100, 316, 1000, 3162, 10000]
+    values: [ 100, 215, 464, 1000, 2154, 4642, 10000]
   seed:
     values: [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]

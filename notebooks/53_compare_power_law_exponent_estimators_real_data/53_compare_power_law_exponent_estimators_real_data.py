@@ -131,6 +131,7 @@ g = sns.relplot(
     col_wrap=4,
     hue="Fit Method",
     hue_order=fit_methods,
+    palette="husl",
     # hue="Model",
     # hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
     # row="Num. Problems",
@@ -158,7 +159,7 @@ fig.text(
 )
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
-    plot_filename="llmonkeys_y=mean_squared_log_error_x=num_samples_per_problem_hue=fit_method_col=model_style=num_problems_style",
+    plot_filename="llmonkeys_y=mean_squared_log_error_x=fraction_forecasting_horizon_hue=fit_method_col=model_style=num_problems_style",
 )
 plt.show()
 
