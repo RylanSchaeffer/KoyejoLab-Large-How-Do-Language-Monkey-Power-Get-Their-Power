@@ -1,3 +1,4 @@
+import ast
 import itertools
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
@@ -19,24 +20,28 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
     refresh=False,
 )
 
-bon_jailbreaking_text_cross_validated_scaling_coeff_df = src.analyze.create_or_load_cross_validated_bon_jailbreaking_text_scaling_coefficient_data_df(
-    # refresh=False,
-    refresh=True,
-)
+sweep_ids = [
+    "u7dyrxqa",  # LLMonkeys Pythia MATH.
+]
 
-# Load backtested scaling coefficient fits.
-llmonkeys_pythia_math_cross_validated_scaling_coeff_df = src.analyze.create_or_load_cross_validated_large_language_monkey_pythia_math_scaling_coefficient_data_df(
-    # refresh=False,
-    refresh=True,
+llmonkeys_pythia_math_cross_validated_scaling_coeff_df = (
+    src.utils.download_wandb_project_runs_configs(
+        wandb_project_path="monkey-power-law-estimators",
+        data_dir=data_dir,
+        sweep_ids=sweep_ids,
+        refresh=False,
+    )
 )
-# # Exclude this antequated method.
-# llmonkeys_pythia_math_cross_validated_scaling_coeff_df = (
-#     llmonkeys_pythia_math_cross_validated_scaling_coeff_df[
-#         llmonkeys_pythia_math_cross_validated_scaling_coeff_df["Fit Method"]
-#         != "Beta-Binomial"
-#     ]
-# )
-
+llmonkeys_pythia_math_cross_validated_scaling_coeff_df[
+    "Model"
+] = llmonkeys_pythia_math_cross_validated_scaling_coeff_df["dataset_kwargs"].map(
+    lambda s: ast.literal_eval(s)["Model"]
+)
+llmonkeys_pythia_math_cross_validated_scaling_coeff_df[
+    "Benchmark"
+] = llmonkeys_pythia_math_cross_validated_scaling_coeff_df["dataset_kwargs"].map(
+    lambda s: ast.literal_eval(s)["Benchmark"]
+)
 
 # Load the actual pass_D@k data to overlay.
 llmonkeys_pythia_math_pass_at_k_df = src.analyze.create_or_load_large_language_monkeys_pythia_math_pass_at_k_df(
@@ -59,23 +64,31 @@ llmonkeys_pythia_math_neg_log_avg_pass_at_k_df["Neg Log Avg Score"] = -np.log(
 
 # Convert the scaling parameters to forecasts.
 ks_list = np.unique(np.logspace(0, 4, 100).astype(int))
+fit_methods = [
+    "Least Squares",
+    "Beta-Binomial",
+    "Discretized Beta",
+    "Discretized Kumaraswamy",
+    "Kumaraswamy-Binomial",
+]
 predicted_power_law_curves_dfs_list = []
 for row_idx, row in llmonkeys_pythia_math_cross_validated_scaling_coeff_df.iterrows():
-    df = pd.DataFrame.from_dict(
-        {
-            "Scaling Parameter": ks_list,
-            "Neg Log Avg Score": row["Fit Power Law Prefactor"]
-            * np.power(ks_list, -row["Fit Power Law Exponent"]),
-            "Num. Problems": [row["Num. Problems"]] * len(ks_list),
-            "Num. Samples per Problem": [row["Num. Samples per Problem"]]
-            * len(ks_list),
-            "Repeat Index": [row["Repeat Index"]] * len(ks_list),
-            "Fit Method": [row["Fit Method"]] * len(ks_list),
-            "Model": [row["Model"]] * len(ks_list),
-            "Benchmark": [row["Benchmark"]] * len(ks_list),
-        }
-    )
-    predicted_power_law_curves_dfs_list.append(df)
+    for fit_method in fit_methods:
+        df = pd.DataFrame.from_dict(
+            {
+                "Scaling Parameter": ks_list,
+                "Neg Log Avg Score": row[f"{fit_method} Power Law Prefactor"]
+                * np.power(ks_list, -row[f"{fit_method} Power Law Exponent"]),
+                "Num. Problems": [row["num_problems"]] * len(ks_list),
+                "Num. Samples per Problem": [row["num_samples_per_problem"]]
+                * len(ks_list),
+                "Repeat Index": [row["seed"]] * len(ks_list),
+                "Fit Method": [fit_method] * len(ks_list),
+                "Model": [row["Model"]] * len(ks_list),
+                "Benchmark": [row["Benchmark"]] * len(ks_list),
+            }
+        )
+        predicted_power_law_curves_dfs_list.append(df)
 predicted_power_law_curves_df = pd.concat(
     predicted_power_law_curves_dfs_list, ignore_index=True
 ).reset_index(drop=True)
@@ -99,6 +112,9 @@ joint_neg_log_avg_score_at_10000_df = (
     )
 )
 
+joint_neg_log_avg_score_at_10000_df["Fraction of Forecasting Horizon"] = (
+    joint_neg_log_avg_score_at_10000_df["Num. Samples per Problem"] / 10000.0
+)
 joint_neg_log_avg_score_at_10000_df["Squared Log Error"] = np.square(
     np.log(joint_neg_log_avg_score_at_10000_df["Neg Log Avg Score_Actual"])
     - np.log(joint_neg_log_avg_score_at_10000_df["Neg Log Avg Score_Predicted"])
@@ -107,32 +123,44 @@ plt.close()
 g = sns.relplot(
     data=joint_neg_log_avg_score_at_10000_df,
     kind="line",
-    x="Num. Samples per Problem",
+    # x="Num. Samples per Problem",
+    x="Fraction of Forecasting Horizon",
     y="Squared Log Error",
     col="Model",
     col_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
-    hue="Model",
-    hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
-    row="Num. Problems",
-    style="Fit Method",
+    col_wrap=4,
+    hue="Fit Method",
+    hue_order=fit_methods,
+    # hue="Model",
+    # hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
+    # row="Num. Problems",
+    style="Num. Problems",
     facet_kws={"margin_titles": True},
 )
 g.set(
     xscale="log",
     yscale="log",
     ylabel="",  # We will add this ourselves.
-)
-g.axes[int(g.axes.shape[0] // 2), 0].set_ylabel(
-    "Squared Log Error "
-    + r"$:= \Big( \log \big( \operatorname{pass_{\mathcal{D}}@10000} \big) - \log \big( \widehat{\operatorname{pass_{\mathcal{D}}@10000}} \big) \Big)^2$"
+    # ylabel="Squared Log Error " + r"$:= \Big( \log \big( \operatorname{pass_{\mathcal{D}}@10000} \big) - \log \big( \widehat{\operatorname{pass_{\mathcal{D}}@10000}} \big) \Big)^2$"
 )
 g.set_titles(row_template="{row_name} Problems", col_template="{col_name}")
 sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
+fig = plt.gcf()
+fig.text(
+    x=-0.05,  # Adjust this value to move text left/right
+    y=0.5,  # Adjust this value to move text up/down
+    s="Squared Log Error "
+    + r"$:= \Big( \log \big( \operatorname{pass_{\mathcal{D}}@10000} \big) - \log \big( \widehat{\operatorname{pass_{\mathcal{D}}@10000}} \big) \Big)^2$",
+    rotation=90,
+    verticalalignment="center",
+    horizontalalignment="center",
+    # fontsize=12  # Adjust size as needed
+)
 src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
-    plot_filename="llmonkeys_y=mean_squared_log_error_x=num_samples_per_problem_hue=model_col=model_row=num_problems_style=fit_method",
+    plot_filename="llmonkeys_y=mean_squared_log_error_x=num_samples_per_problem_hue=fit_method_col=model_style=num_problems_style",
 )
-# plt.show()
+plt.show()
 
 
 plt.close()
