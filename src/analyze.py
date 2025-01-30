@@ -267,11 +267,13 @@ def compute_failure_rate_at_k_attempts_under_beta_three_parameter_distribution(
     try:
         with mpmath.workdps(dps):
             # Precompute constant factors (to avoid repeating in integrand)
-            denom = (scale ** (alpha + beta - 1)) * mpmath.beta(alpha, beta)
+            denom = mpmath.power(scale, alpha + beta - 1.0) * mpmath.beta(alpha, beta)
 
             def integrand(p):
                 return (
-                    (1.0 - p) ** k * p ** (alpha - 1.0) * (scale - p) ** (beta - 1.0)
+                    mpmath.power(1.0 - p, k)
+                    * mpmath.power(p, alpha - 1.0)
+                    * mpmath.power(scale - p, beta - 1.0)
                 ) / denom
 
             integral = mpmath.quad(integrand, [0, scale])
@@ -508,26 +510,28 @@ def compute_scaling_exponent_from_distributional_fit(
                     "groupby_placeholder": ["placeholder"] * len(k_values),
                 }
             )
-            tmp_df["alpha Neg Log Score"] = np.exp(
-                tmp_df["Neg Log Score"].values[0]
-            ) * np.power(
-                tmp_df["Scaling Parameter"],
-                -distributional_fit_df["alpha"].values[row_idx],
-            )
-
             # import matplotlib.pyplot as plt
             # import seaborn as sns
+            #
+            # tmp_df["alpha Neg Log Score"] = tmp_df["Neg Log Score"].values[
+            #     0
+            # ] * np.power(
+            #     tmp_df["Scaling Parameter"],
+            #     -distributional_fit_df["alpha"].values[row_idx],
+            # )
             #
             # plt.close()
             # g = sns.lineplot(
             #     tmp_df,
             #     x="Scaling Parameter",
             #     y="Neg Log Score",
+            #     label=r"$-\log( 1 - \int_{0}^c (1-p)^k p(p) dp )$",
             # )
             # g = sns.lineplot(
             #     tmp_df,
             #     x="Scaling Parameter",
             #     y="alpha Neg Log Score",
+            #     label=r"$\approx a k^{-b}$",
             # )
             # g.set(xscale="log", yscale="log")
             # plt.show()
@@ -2784,6 +2788,7 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
     )
 
     # Method 2: Distributional fit to pass_i@1 using Discretized Beta MLE.
+    # Start with reasonable initial alpha, beta.
     subset_discretized_beta_mle_df = pd.DataFrame(
         src.analyze.fit_discretized_beta_three_parameters_to_num_samples_and_num_successes(
             num_samples_and_num_successes_df=subset_num_samples_and_num_successes_df,
@@ -2803,6 +2808,7 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
         fit_power_law_exponent = subset_discretized_beta_mle_df[
             "Power Law Exponent"
         ].values[0]
+        # fit_power_law_exponent = subset_discretized_beta_mle_df["alpha"].values[0]
     else:
         fit_power_law_prefactor = np.nan
         fit_power_law_exponent = np.nan
@@ -2837,6 +2843,7 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
         fit_power_law_exponent = subset_discretized_kumaraswamy_mle_df[
             "Power Law Exponent"
         ].values[0]
+        # fit_power_law_exponent = subset_discretized_beta_mle_df["alpha"].values[0]
     else:
         fit_power_law_prefactor = np.nan
         fit_power_law_exponent = np.nan
@@ -3189,10 +3196,10 @@ def fit_beta_negative_binomial_three_parameters_to_num_samples_and_num_successes
 def fit_discretized_beta_three_parameters_to_num_samples_and_num_successes(
     num_samples_and_num_successes_df: pd.DataFrame,
     resolution: float = 1e-4,
-    initial_params: Tuple[float, float] = (0.35, 3.5),
     bounds: Tuple[Tuple[float, float]] = ((0.01, 100), (0.01, 100)),
-    num_windows_per_factor_of_10: int = 10,
     maxiter: int = 5000,
+    initial_params: Optional[Tuple[float, float]] = None,
+    epsilon: Optional[float] = 1e-6,
 ) -> pd.Series:
     # Rylan: I think that resolution should be 1 / number of samples per problem.
     smallest_nonzero_pass_at_1 = resolution
@@ -3217,6 +3224,23 @@ def fit_discretized_beta_three_parameters_to_num_samples_and_num_successes(
     ).values
     assert pass_i_at_1_arr.min() >= bins[0]
     assert (pass_i_at_1_arr.max() < bins[-1]) or pass_i_at_1_arr.max() == 1.0
+
+    if initial_params is None:
+        try:
+            alpha, beta, _, _ = scipy.stats.beta.fit(
+                np.clip(
+                    pass_i_at_1_arr, epsilon, 1.0 - epsilon
+                ),  # Make sure that we remain in [0., 1.]
+                floc=0.0,
+                fscale=(len(pass_i_at_1_arr) + 1.0)
+                * pass_i_at_1_arr.max()
+                / len(pass_i_at_1_arr),
+            )
+        except scipy.stats._continuous_distns.FitSolverError:
+            # Reasonable fallback parameters.
+            alpha = 0.35
+            beta = 3.5
+        initial_params = (alpha, beta)
 
     try:
         optimize_result = scipy.optimize.minimize(
@@ -3260,9 +3284,10 @@ def fit_discretized_beta_three_parameters_to_num_samples_and_num_successes(
 def fit_discretized_kumaraswamy_three_parameters_to_num_samples_and_num_successes(
     num_samples_and_num_successes_df: pd.DataFrame,
     resolution: float = 1e-4,
-    initial_params: Tuple[float, float] = (0.35, 3.5),
+    initial_params: Optional[Tuple[float, float]] = None,
     bounds: Tuple[Tuple[float, float]] = ((0.01, 100), (0.01, 100)),
     num_windows_per_factor_of_10: int = 5,
+    epsilon: float = 1e-6,
 ) -> pd.Series:
     smallest_nonzero_pass_at_1 = resolution
     log10_smallest_nonzero_pass_at_1 = np.log10(smallest_nonzero_pass_at_1)
@@ -3282,6 +3307,24 @@ def fit_discretized_kumaraswamy_three_parameters_to_num_samples_and_num_successe
     ).values
     assert pass_i_at_1_arr.min() >= bins[0]
     assert pass_i_at_1_arr.max() < bins[-1]
+
+    if initial_params is None:
+        try:
+            # This isn't quite correct, but we're just trying to find a reasonable initialization.
+            alpha, beta, _, _ = scipy.stats.beta.fit(
+                np.clip(
+                    pass_i_at_1_arr, epsilon, 1.0 - epsilon
+                ),  # Make sure that we remain in [0., 1.]
+                floc=0.0,
+                fscale=(len(pass_i_at_1_arr) + 1.0)
+                * pass_i_at_1_arr.max()
+                / len(pass_i_at_1_arr),
+            )
+        except scipy.stats._continuous_distns.FitSolverError:
+            # Reasonable fallback parameters.
+            alpha = 0.35
+            beta = 3.5
+        initial_params = (alpha, beta)
 
     # Maximize the log likelihood by minimizing its negative
     optimize_result = scipy.optimize.minimize(

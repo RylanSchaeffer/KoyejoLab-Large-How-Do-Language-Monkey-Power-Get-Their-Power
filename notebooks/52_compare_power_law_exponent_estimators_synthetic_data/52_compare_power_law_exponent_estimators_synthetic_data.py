@@ -20,7 +20,9 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
 
 sweep_ids = [
     # "dcou6k5u",  # Synthetic.  [Resolution=1e-4] [Num Windows=5]
-    "cy6ftvm7",  # Synthetic.  [Resolution=1/Num. Samples Per Problems] [Num Windows=10]
+    # "cy6ftvm7",  # Synthetic.  [Resolution=1/Num. Samples Per Problems] [Num Windows=10]
+    "p44piiif",  # Synthetic [Resolution=1/Num. Samples Per Problems] [Bins=1/resolution/10]
+    # "pdv9w2y1",  # Synthetic [Resolution=1/Num. Samples Per Problems] [Bins=1/resolution/10] [Discretized Exponent=Asymptotic]
 ]
 
 synthetic_cross_validated_scaling_coeff_df = src.utils.download_wandb_project_runs_configs(
