@@ -19,16 +19,16 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
 )
 
 sweep_ids = [
-    "dcou6k5u",  # Synthetic.
+    # "dcou6k5u",  # Synthetic.  [Resolution=1e-4] [Num Windows=5]
+    "cy6ftvm7",  # Synthetic.  [Resolution=1/Num. Samples Per Problems] [Num Windows=10]
 ]
 
-synthetic_cross_validated_scaling_coeff_df = (
-    src.utils.download_wandb_project_runs_configs(
-        wandb_project_path="monkey-power-law-estimators",
-        data_dir=data_dir,
-        sweep_ids=sweep_ids,
-        refresh=False,
-    )
+synthetic_cross_validated_scaling_coeff_df = src.utils.download_wandb_project_runs_configs(
+    wandb_project_path="monkey-power-law-estimators",
+    data_dir=data_dir,
+    sweep_ids=sweep_ids,
+    # refresh=False,
+    refresh=True,
 )
 
 

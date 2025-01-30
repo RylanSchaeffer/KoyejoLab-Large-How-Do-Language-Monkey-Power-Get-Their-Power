@@ -2820,7 +2820,8 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
     # Method 3: Distributional fit to pass_i@1 using Discretized Kumaraswamy MLE.
     subset_discretized_kumaraswamy_mle_df = pd.DataFrame(
         src.analyze.fit_discretized_kumaraswamy_three_parameters_to_num_samples_and_num_successes(
-            num_samples_and_num_successes_df=subset_num_samples_and_num_successes_df
+            num_samples_and_num_successes_df=subset_num_samples_and_num_successes_df,
+            resolution=1.0 / num_samples_per_problem,
         )
     ).T
     if not subset_discretized_beta_mle_df["success"].values[0].startswith("Failure"):
@@ -3193,18 +3194,23 @@ def fit_discretized_beta_three_parameters_to_num_samples_and_num_successes(
     num_windows_per_factor_of_10: int = 10,
     maxiter: int = 5000,
 ) -> pd.Series:
+    # Rylan: I think that resolution should be 1 / number of samples per problem.
     smallest_nonzero_pass_at_1 = resolution
     log10_smallest_nonzero_pass_at_1 = np.log10(smallest_nonzero_pass_at_1)
     log_bins = np.logspace(
         log10_smallest_nonzero_pass_at_1,
         0,
-        -int(log10_smallest_nonzero_pass_at_1) * num_windows_per_factor_of_10 + 1,
+        # -int(log10_smallest_nonzero_pass_at_1) * num_windows_per_factor_of_10 + 1,
+        num=int(
+            1.0 / resolution / 10.0
+        ),  # Heuristic. I think that the number of bins should be an order of magnitude larger than the number of samples per problem.
     )
-    small_value_for_plotting = smallest_nonzero_pass_at_1 / 2.0
-    bins = np.concatenate(
-        [[-small_value_for_plotting], [small_value_for_plotting], log_bins]
-    )
-    bins[0] = 0.0
+    # small_value_for_plotting = smallest_nonzero_pass_at_1 / 2.0
+    # bins = np.concatenate(
+    #     [[-small_value_for_plotting], [small_value_for_plotting], log_bins]
+    # )
+    # bins[0] = 0.0
+    bins = np.concatenate(([[0.0], log_bins]))
     pass_i_at_1_arr = (
         num_samples_and_num_successes_df["Num. Samples Correct"]
         / num_samples_and_num_successes_df["Num. Samples Total"]
