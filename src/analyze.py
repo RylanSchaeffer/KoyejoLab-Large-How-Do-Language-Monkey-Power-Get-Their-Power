@@ -2786,7 +2786,8 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
     # Method 2: Distributional fit to pass_i@1 using Discretized Beta MLE.
     subset_discretized_beta_mle_df = pd.DataFrame(
         src.analyze.fit_discretized_beta_three_parameters_to_num_samples_and_num_successes(
-            num_samples_and_num_successes_df=subset_num_samples_and_num_successes_df
+            num_samples_and_num_successes_df=subset_num_samples_and_num_successes_df,
+            resolution=1.0 / num_samples_per_problem,
         )
     ).T
     if not subset_discretized_beta_mle_df["success"].values[0].startswith("Failure"):
@@ -3189,7 +3190,7 @@ def fit_discretized_beta_three_parameters_to_num_samples_and_num_successes(
     resolution: float = 1e-4,
     initial_params: Tuple[float, float] = (0.35, 3.5),
     bounds: Tuple[Tuple[float, float]] = ((0.01, 100), (0.01, 100)),
-    num_windows_per_factor_of_10: int = 5,
+    num_windows_per_factor_of_10: int = 10,
     maxiter: int = 5000,
 ) -> pd.Series:
     smallest_nonzero_pass_at_1 = resolution

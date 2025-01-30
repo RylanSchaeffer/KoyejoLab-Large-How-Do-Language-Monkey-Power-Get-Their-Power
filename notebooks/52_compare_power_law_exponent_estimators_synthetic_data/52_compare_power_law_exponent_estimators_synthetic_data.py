@@ -38,7 +38,7 @@ def create_full_distribution_str(row: pd.Series) -> str:
     a: float = dataset_kwargs["a"]
     b: float = dataset_kwargs["b"]
     scale: float = dataset_kwargs["scale"]
-    full_distribution_str: str = f"{distribution_name}({a}, {b}, {scale})"
+    full_distribution_str: str = f"{distribution_name}({a}, {b}, 0, {scale})"
     return full_distribution_str
 
 
@@ -106,9 +106,10 @@ g = sns.relplot(
     y="Asymptotic Power Law Exponent Relative Error",
     hue="Fit Method",
     palette="husl",
-    row="Num. Problems",
+    style="Num. Problems",
     col="True Distribution",
-    facet_kws={"margin_titles": True, "sharey": False},
+    col_wrap=8,
+    facet_kws={"margin_titles": True, "sharey": True},
 )
 g.set(
     xscale="log",
