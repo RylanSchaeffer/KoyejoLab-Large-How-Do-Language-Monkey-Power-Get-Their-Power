@@ -48,6 +48,10 @@ llmonkeys_pythia_math_pass_at_k_df = src.analyze.create_or_load_large_language_m
     refresh=False,
     # refresh=True,
 )
+# TODO(Rylan): Remove hard-coding.
+total_num_problems = 128  # llmonkeys_pythia_math_pass_at_k_df["Problem Idx"].nunique()
+max_samples_per_problem = 10000.0
+total_num_samples = total_num_problems * max_samples_per_problem
 
 llmonkeys_pythia_math_neg_log_avg_pass_at_k_df = (
     llmonkeys_pythia_math_pass_at_k_df.groupby(
@@ -112,13 +116,19 @@ joint_neg_log_avg_score_at_10000_df = (
     )
 )
 
+joint_neg_log_avg_score_at_10000_df["Num. Samples"] = (
+    joint_neg_log_avg_score_at_10000_df["Num. Problems"]
+    * joint_neg_log_avg_score_at_10000_df["Num. Samples per Problem"]
+)
+
 joint_neg_log_avg_score_at_10000_df["Fraction of Forecasting Horizon"] = (
-    joint_neg_log_avg_score_at_10000_df["Num. Samples per Problem"] / 10000.0
+    joint_neg_log_avg_score_at_10000_df["Num. Samples"] / total_num_samples
 )
 joint_neg_log_avg_score_at_10000_df["Squared Log Error"] = np.square(
     np.log(joint_neg_log_avg_score_at_10000_df["Neg Log Avg Score_Actual"])
     - np.log(joint_neg_log_avg_score_at_10000_df["Neg Log Avg Score_Predicted"])
 )
+
 plt.close()
 g = sns.relplot(
     data=joint_neg_log_avg_score_at_10000_df,
@@ -142,16 +152,16 @@ g.set(
     xscale="log",
     yscale="log",
     ylabel="",  # We will add this ourselves.
-    # ylabel="Squared Log Error " + r"$:= \Big( \log \big( \operatorname{pass_{\mathcal{D}}@10000} \big) - \log \big( \widehat{\operatorname{pass_{\mathcal{D}}@10000}} \big) \Big)^2$"
 )
 g.set_titles(row_template="{row_name} Problems", col_template="{col_name}")
-sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
+# Move legend to the empty subplot position
+g._legend.set_bbox_to_anchor((1.03, 0.25))  # You might need to adjust these values
+# sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
 fig = plt.gcf()
 fig.text(
-    x=-0.05,  # Adjust this value to move text left/right
+    x=0.0,  # Adjust this value to move text left/right
     y=0.5,  # Adjust this value to move text up/down
-    s="Squared Log Error "
-    + r"$:= \Big( \log \big( \operatorname{pass_{\mathcal{D}}@10000} \big) - \log \big( \widehat{\operatorname{pass_{\mathcal{D}}@10000}} \big) \Big)^2$",
+    s=r"$\Big( \log \big( \operatorname{pass_{\mathcal{D}}@10000} \big) - \log \big( \widehat{\operatorname{pass_{\mathcal{D}}@10000}} \big) \Big)^2$",
     rotation=90,
     verticalalignment="center",
     horizontalalignment="center",
@@ -161,7 +171,7 @@ src.plot.save_plot_with_multiple_extensions(
     plot_dir=results_dir,
     plot_filename="llmonkeys_y=mean_squared_log_error_x=fraction_forecasting_horizon_hue=fit_method_col=model_style=num_problems_style",
 )
-plt.show()
+# plt.show()
 
 
 plt.close()
@@ -173,12 +183,13 @@ g = sns.relplot(
     kind="line",
     x="Scaling Parameter",
     y="Neg Log Avg Score",
-    hue="Model",
-    hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
+    hue="Fit Method",
+    hue_order=fit_methods,
+    palette="husl",
     col="Model",
     col_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
     row="Num. Samples per Problem",
-    style="Fit Method",
+    # style="Fit Method",
     facet_kws={"margin_titles": True},
 )
 g.set(
@@ -187,7 +198,7 @@ g.set(
     xlabel=r"Num. Attempts per Problem $k$",
     ylabel=r"$-\log ( \operatorname{pass_{\mathcal{D}}@k})$",
 )
-g.set_titles(row_template="{row_name} Samples per Problem")
+g.set_titles(row_template="{row_name} Samples per Problem", col_template="{col_name}")
 num_samples_per_problem_values = np.sort(
     predicted_power_law_curves_df["Num. Samples per Problem"].unique()
 )
@@ -221,31 +232,32 @@ src.plot.save_plot_with_multiple_extensions(
 # plt.show()
 
 
-plt.close()
-g = sns.relplot(
-    data=llmonkeys_pythia_math_cross_validated_scaling_coeff_df,
-    kind="line",
-    x="Num. Samples per Problem",
-    y="Fit Power Law Exponent",
-    col="Model",
-    col_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
-    hue="Model",
-    hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
-    row="Num. Problems",
-    style="Fit Method",
-    # col_wrap=4,
-    facet_kws={"margin_titles": True},
-)
-g.set(
-    xscale="log",
-    yscale="log",
-    ylabel=r"Fit Power Law Exponent $\hat{b}$",
-)
-sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
-src.plot.save_plot_with_multiple_extensions(
-    plot_dir=results_dir,
-    plot_filename="llmonkeys_y=fit_power_law_exponent_x=num_samples_per_problem_hue=model_col=model_row=num_problems_style=fit_method",
-)
+# plt.close()
+# g = sns.relplot(
+#     data=llmonkeys_pythia_math_cross_validated_scaling_coeff_df,
+#     kind="line",
+#     x="num_samples_per_problem",
+#     y="Fit Power Law Exponent",
+#     col="Model",
+#     col_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
+#     hue="Model",
+#     hue_order=src.globals.LARGE_LANGUAGE_MONKEYS_PYTHIA_MODELS_ORDER,
+#     row="Num. Problems",
+#     style="Fit Method",
+#     # col_wrap=4,
+#     facet_kws={"margin_titles": True},
+# )
+# g.set(
+#     xscale="log",
+#     xlabel="Num. Samples per Problem",
+#     yscale="log",
+#     ylabel=r"Fit Power Law Exponent $\hat{b}$",
+# )
+# sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1.04))
+# src.plot.save_plot_with_multiple_extensions(
+#     plot_dir=results_dir,
+#     plot_filename="llmonkeys_y=fit_power_law_exponent_x=num_samples_per_problem_hue=model_col=model_row=num_problems_style=fit_method",
+# )
 # plt.show()
 
 # plt.close()
