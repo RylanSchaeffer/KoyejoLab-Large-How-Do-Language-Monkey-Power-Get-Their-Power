@@ -3024,7 +3024,9 @@ def evaluate_sampling_strategies_for_power_law_estimators_from_individual_outcom
     elif sampling_strategy == "per_problem":
         raise NotImplementedError
     elif sampling_strategy == "uniform":
-        num_samples_per_problem = int(total_samples_budget / num_problems)
+        num_samples_per_problem = int(
+            total_samples_budget / num_problems_to_sample_from
+        )
         # Choose the problems to sample from.
         problems_subset_indices = np.random.choice(
             individual_outcomes_per_problem.shape[0],
@@ -3046,7 +3048,7 @@ def evaluate_sampling_strategies_for_power_law_estimators_from_individual_outcom
         )
 
         subset_ks_list = np.array(ks_list)
-        subset_ks_list = subset_ks_list[subset_ks_list <= num_samples_per_problem]
+        subset_ks_list = subset_ks_list[subset_ks_list < num_samples_per_problem]
     else:
         raise ValueError(f"Unknown sampling strategy: {sampling_strategy}")
 
