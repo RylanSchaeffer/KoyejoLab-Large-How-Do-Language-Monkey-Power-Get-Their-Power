@@ -1,0 +1,31 @@
+program: scripts/evaluate_sampling_strategy.py
+entity: rylan
+project: monkey-power-law-sampling-strategies
+method: grid
+parameters:
+  dataset_name:
+    values: [ "large_language_monkeys_pythia_math" ]
+  dataset_kwargs:
+    parameters:
+      Benchmark:
+        values: [
+          "MATH"
+        ]
+      Model:
+        values: [
+          "Pythia 70M",
+          "Pythia 160M",
+          "Pythia 410M",
+          "Pythia 1B",
+          "Pythia 2.8B",
+          "Pythia 6.9B",
+          "Pythia 12B",
+        ]
+  num_problems_to_sample_from:
+    values: [32, 64, 128]
+  sampling_strategy:
+    values: ["uniform"]
+  seed:
+    values: [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+  total_samples_budget:
+    values: [32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536]

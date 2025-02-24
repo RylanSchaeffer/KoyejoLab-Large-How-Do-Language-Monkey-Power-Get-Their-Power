@@ -14,12 +14,12 @@ parameters:
         ]
       a:
         values: [
-          0.2,
+          0.15,
           0.4,
         ]
       b:
         values: [
-          3.5
+          3.5,
           5.0,
         ]
       loc:

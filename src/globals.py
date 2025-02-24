@@ -353,6 +353,26 @@ CAUSAL_LANGUAGE_MODELING_DATASETS_ORDER = [
     "Zyda-2",
 ]
 
+EVALUATE_SAMPLING_STRATEGY_DEFAULT_CONFIG = {
+    "dataset_name": "large_language_monkeys_pythia_math",
+    "dataset_kwargs": {
+        "Benchmark": "MATH",
+        "Model": "Pythia 70M",
+        # "Modality": "text",
+        # "Temperature": 1.0,
+    },
+    # "num_problems_to_sample_from": 32,
+    # "num_problems_to_sample_from": 64,
+    "num_problems_to_sample_from": 128,
+    "sampling_strategy": "uniform",
+    "sampling_strategy_kwargs": {},
+    "seed": 0,
+    # "total_samples_budget": 1024,
+    # "total_samples_budget": 4096,
+    # "total_samples_budget": 64000,
+    "total_samples_budget": 128000,
+}
+
 FIT_AND_SCORE_ESTIMATORS_DEFAULT_CONFIG = {
     # "dataset_name": "bon_jailbreaking_text",
     # "dataset_kwargs": {

@@ -11,7 +11,7 @@ import scipy.integrate
 from scipy.optimize import minimize
 import scipy.stats
 import scipy.stats._continuous_distns
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import src.globals
 
@@ -2805,10 +2805,10 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
         fit_power_law_prefactor = subset_discretized_beta_mle_df[
             "Power Law Prefactor"
         ].values[0]
-        fit_power_law_exponent = subset_discretized_beta_mle_df[
-            "Power Law Exponent"
-        ].values[0]
-        # fit_power_law_exponent = subset_discretized_beta_mle_df["alpha"].values[0]
+        # fit_power_law_exponent = subset_discretized_beta_mle_df[
+        #     "Power Law Exponent"
+        # ].values[0]
+        fit_power_law_exponent = subset_discretized_beta_mle_df["alpha"].values[0]
     else:
         fit_power_law_prefactor = np.nan
         fit_power_law_exponent = np.nan
@@ -2840,10 +2840,12 @@ def cross_validate_power_law_coefficient_estimators_from_individual_outcomes_hel
         fit_power_law_prefactor = subset_discretized_kumaraswamy_mle_df[
             "Power Law Prefactor"
         ].values[0]
-        fit_power_law_exponent = subset_discretized_kumaraswamy_mle_df[
-            "Power Law Exponent"
-        ].values[0]
-        # fit_power_law_exponent = subset_discretized_beta_mle_df["alpha"].values[0]
+        # fit_power_law_exponent = subset_discretized_kumaraswamy_mle_df[
+        #     "Power Law Exponent"
+        # ].values[0]
+        fit_power_law_exponent = subset_discretized_kumaraswamy_mle_df["alpha"].values[
+            0
+        ]
     else:
         fit_power_law_prefactor = np.nan
         fit_power_law_exponent = np.nan
@@ -2964,6 +2966,132 @@ def estimate_pass_at_k(
         [estimator(n, c, k) for n, c in zip(num_samples_total, num_samples_correct)]
     )
     return pass_at_k
+
+
+def evaluate_sampling_strategies_for_power_law_estimators_from_individual_outcomes(
+    individual_outcomes_per_problem_df: pd.DataFrame,
+    sampling_strategy: str,
+    sampling_strategy_kwargs: Dict[str, Any],
+    num_problems_to_sample_from: int,
+    total_samples_budget: int,
+) -> Dict[str, float]:
+    unique_problem_indices = individual_outcomes_per_problem_df["Problem Idx"].unique()
+    num_problems = len(unique_problem_indices)
+    unique_attempt_indices = individual_outcomes_per_problem_df["Attempt Idx"].unique()
+
+    individual_outcomes_per_problem: np.ndarray = (
+        individual_outcomes_per_problem_df.pivot(
+            index="Problem Idx",
+            columns="Attempt Idx",
+            values="Score",
+        ).values
+    )
+    max_num_samples_per_problem = individual_outcomes_per_problem_df[
+        "Attempt Idx"
+    ].max()
+
+    ks_list: List[int] = np.unique(
+        np.logspace(
+            0,
+            np.log10(max_num_samples_per_problem),
+            100,  # Fit using 100 uniformly spaced samples.
+        ).astype(int)
+    ).tolist()
+
+    # Step 1: Compute the "true" power law exponent using least squares fitting on *all* the data.
+    pass_at_k_df = src.analyze.compute_pass_at_k_from_individual_outcomes(
+        individual_outcomes_per_problem=individual_outcomes_per_problem,
+        ks_list=ks_list,
+    )
+    avg_pass_at_k_df = (
+        pass_at_k_df.groupby("Scaling Parameter")["Score"].mean().reset_index()
+    )
+    avg_pass_at_k_df["Neg Log Score"] = -np.log(avg_pass_at_k_df["Score"])
+    avg_pass_at_k_df["Placeholder"] = "Placeholder"
+    (
+        _,
+        least_sqrs_fitted_power_law_parameters_df,
+    ) = src.analyze.fit_power_law(
+        df=avg_pass_at_k_df,
+        covariate_col="Scaling Parameter",
+        target_col="Neg Log Score",
+        groupby_cols=["Placeholder"],
+    )
+
+    # Step 2: Grab a subset of the data.
+    if sampling_strategy == "across_problems":
+        raise NotImplementedError
+    elif sampling_strategy == "per_problem":
+        raise NotImplementedError
+    elif sampling_strategy == "uniform":
+        num_samples_per_problem = int(total_samples_budget / num_problems)
+        # Choose the problems to sample from.
+        problems_subset_indices = np.random.choice(
+            individual_outcomes_per_problem.shape[0],
+            size=num_problems_to_sample_from,
+            replace=False,
+        ).astype(int)
+
+        # Consider only the specified subset of problems.
+        # For each problem, draw samples (with replacement) from the problem.
+        subset_individual_outcomes_per_problem = np.array(
+            [
+                np.random.choice(
+                    individual_outcomes_per_problem[i, :],
+                    size=num_samples_per_problem,
+                    replace=True,
+                )
+                for i in problems_subset_indices
+            ]
+        )
+
+        subset_ks_list = np.array(ks_list)
+        subset_ks_list = subset_ks_list[subset_ks_list <= num_samples_per_problem]
+    else:
+        raise ValueError(f"Unknown sampling strategy: {sampling_strategy}")
+
+    # Step 3: Estimate the power law coefficients using least squares fitting on the subset of data.
+    subset_pass_at_k_df = src.analyze.compute_pass_at_k_from_individual_outcomes(
+        individual_outcomes_per_problem=subset_individual_outcomes_per_problem,
+        ks_list=subset_ks_list,
+    )
+    avg_subset_pass_at_k_df = (
+        subset_pass_at_k_df.groupby("Scaling Parameter")["Score"].mean().reset_index()
+    )
+    avg_subset_pass_at_k_df["Neg Log Score"] = -np.log(avg_subset_pass_at_k_df["Score"])
+
+    avg_subset_pass_at_k_df["Placeholder"] = "Placeholder"
+    (
+        _,
+        subset_least_sqrs_fitted_power_law_parameters_df,
+    ) = src.analyze.fit_power_law(
+        df=avg_subset_pass_at_k_df,
+        covariate_col="Scaling Parameter",
+        target_col="Neg Log Score",
+        groupby_cols=["Placeholder"],
+    )
+
+    # Log cross validated power law parameter estimates.
+    sampling_strategy_results = {
+        "Full Data Least Squares Power Law Exponent": float(
+            least_sqrs_fitted_power_law_parameters_df["Power Law Exponent"].values[0]
+        ),
+        "Full Data Least Squares Power Law Prefactor": float(
+            least_sqrs_fitted_power_law_parameters_df["Power Law Prefactor"].values[0]
+        ),
+        "Subset Data Least Squares Power Law Exponent": float(
+            subset_least_sqrs_fitted_power_law_parameters_df[
+                "Power Law Exponent"
+            ].values[0]
+        ),
+        "Subset Data Least Squares Power Law Prefactor": float(
+            subset_least_sqrs_fitted_power_law_parameters_df[
+                "Power Law Prefactor"
+            ].values[0]
+        ),
+    }
+
+    return sampling_strategy_results
 
 
 def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(

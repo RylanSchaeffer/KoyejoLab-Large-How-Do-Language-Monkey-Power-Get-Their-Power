@@ -19,18 +19,16 @@ data_dir, results_dir = src.utils.setup_notebook_dir(
 )
 
 sweep_ids = [
-    # "dcou6k5u",  # Synthetic.  [Resolution=1e-4] [Num Windows=5]
-    # "cy6ftvm7",  # Synthetic.  [Resolution=1/Num. Samples Per Problems] [Num Windows=10]
-    "p44piiif",  # Synthetic [Resolution=1/Num. Samples Per Problems] [Bins=1/resolution/10]
-    # "pdv9w2y1",  # Synthetic [Resolution=1/Num. Samples Per Problems] [Bins=1/resolution/10] [Discretized Exponent=Asymptotic]
+    # "jjlq6khm",  # Synthetic [Resolution=1/Num. Samples Per Problems] [Bins=1/resolution/10]
+    "2j0virq8",  # Synthetic [Resolution=1/Num. Samples Per Problems] [Bins=1/resolution/10] [Distributional=alpha]
 ]
 
 synthetic_cross_validated_scaling_coeff_df = src.utils.download_wandb_project_runs_configs(
     wandb_project_path="monkey-power-law-estimators",
     data_dir=data_dir,
     sweep_ids=sweep_ids,
-    # refresh=False,
-    refresh=True,
+    refresh=False,
+    # refresh=True,
 )
 
 
@@ -64,10 +62,10 @@ synthetic_cross_validated_scaling_coeff_df[
 
 fit_methods = [
     "Least Squares",
-    "Beta-Binomial",
+    # "Beta-Binomial",
     "Discretized Beta",
     "Discretized Kumaraswamy",
-    "Kumaraswamy-Binomial",
+    # "Kumaraswamy-Binomial",
 ]
 synthetic_cross_validated_scaling_coeff_melted_df = (
     synthetic_cross_validated_scaling_coeff_df.melt(
@@ -100,6 +98,25 @@ synthetic_cross_validated_scaling_coeff_melted_df[
 )
 
 
+col_order = [
+    "Beta(0.15, 3.5, 0, 0.1)",
+    "Beta(0.15, 5, 0, 0.1)",
+    # "Kumaraswamy(0.15, 3.5, 0, 0.1)",
+    # "Kumaraswamy(0.15, 5, 0, 0.1)",
+    # "Beta(0.4, 3.5, 0, 0.1)",
+    # "Beta(0.4, 5, 0, 0.1)",
+    # "Kumaraswamy(0.4, 3.5, 0, 0.1)",
+    # "Kumaraswamy(0.4, 5, 0, 0.1)",
+    "Beta(0.15, 3.5, 0, 0.8)",
+    "Beta(0.15, 5, 0, 0.8)",
+    # "Kumaraswamy(0.15, 3.5, 0, 0.8)",
+    # "Kumaraswamy(0.15, 5, 0, 0.8)",
+    # "Beta(0.4, 3.5, 0, 0.8)",
+    # "Beta(0.4, 5, 0, 0.8)",
+    # "Kumaraswamy(0.4, 3.5, 0, 0.8)",
+    # "Kumaraswamy(0.4, 5, 0, 0.8)",
+]
+
 plt.close()
 g = sns.relplot(
     data=synthetic_cross_validated_scaling_coeff_melted_df,
@@ -110,8 +127,10 @@ g = sns.relplot(
     palette="husl",
     style="Num. Problems",
     col="True Distribution",
-    col_wrap=8,
+    col_wrap=2,
+    col_order=col_order,
     facet_kws={"margin_titles": True, "sharey": True},
+    aspect=1.5,
 )
 g.set(
     xscale="log",
