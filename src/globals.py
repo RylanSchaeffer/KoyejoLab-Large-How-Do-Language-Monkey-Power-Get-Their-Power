@@ -367,10 +367,10 @@ EVALUATE_SAMPLING_STRATEGY_DEFAULT_CONFIG = {
     "sampling_strategy": "uniform",
     "sampling_strategy_kwargs": {},
     "seed": 0,
-    # "total_samples_budget": 1024,
+    "total_samples_budget": 1024,
     # "total_samples_budget": 4096,
     # "total_samples_budget": 64000,
-    "total_samples_budget": 128000,
+    # "total_samples_budget": 128000,
 }
 
 FIT_AND_SCORE_ESTIMATORS_DEFAULT_CONFIG = {

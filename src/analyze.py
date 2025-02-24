@@ -3091,6 +3091,30 @@ def evaluate_sampling_strategies_for_power_law_estimators_from_individual_outcom
         ),
     }
 
+    sampling_strategy_results["Power Law Exponent Relative Error"] = (
+        np.abs(
+            sampling_strategy_results["Full Data Least Squares Power Law Exponent"]
+            - sampling_strategy_results["Subset Data Least Squares Power Law Exponent"]
+        )
+        / sampling_strategy_results["Full Data Least Squares Power Law Exponent"]
+    )
+
+    sampling_strategy_results["Power Law Exponent Squared Error"] = np.square(
+        sampling_strategy_results["Full Data Least Squares Power Law Exponent"]
+        - sampling_strategy_results["Subset Data Least Squares Power Law Exponent"]
+    )
+    sampling_strategy_results["Power Law Prefactor Relative Error"] = (
+        np.abs(
+            sampling_strategy_results["Full Data Least Squares Power Law Prefactor"]
+            - sampling_strategy_results["Subset Data Least Squares Power Law Prefactor"]
+        )
+        / sampling_strategy_results["Full Data Least Squares Power Law Prefactor"]
+    )
+
+    sampling_strategy_results["Power Law Prefactor Squared Error"] = np.square(
+        sampling_strategy_results["Full Data Least Squares Power Law Prefactor"]
+        - sampling_strategy_results["Subset Data Least Squares Power Law Prefactor"]
+    )
     return sampling_strategy_results
 
 
