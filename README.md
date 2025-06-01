@@ -26,6 +26,7 @@
 
 To cite this work, please use:
 
+```
 @inproceedings{
 schaeffer2025monkeypowerlaws,
 title={How Do Large Language Monkeys Get Their Power (Laws)?},
@@ -34,3 +35,4 @@ booktitle={Forty-second International Conference on Machine Learning},
 year={2025},
 url={https://openreview.net/forum?id=QqVZ28qems}
 }
+```
