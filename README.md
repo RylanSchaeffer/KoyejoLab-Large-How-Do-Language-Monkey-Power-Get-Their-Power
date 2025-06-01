@@ -26,7 +26,7 @@
 
 To cite this work, please use:
 
-```
+```bibtex
 @inproceedings{schaeffer2025monkeypowerlaws,
     title={How Do Large Language Monkeys Get Their Power (Laws)?},
     author={Rylan Schaeffer and Joshua Kazdan and John Hughes and Jordan Juravsky and Sara Price and Aengus Lynch and Erik Jones and Robert Kirk and Azalia Mirhoseini and Sanmi Koyejo},
