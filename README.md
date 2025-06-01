@@ -21,3 +21,16 @@
 `conda install pytorch-gpu torchvision torchaudio pytorch-cuda=12.4 -c pytorch -c nvidia -y`
 
 `pip install protobuf sentencepiece`
+
+## Citing
+
+To cite this work, please use:
+
+@inproceedings{
+schaeffer2025monkeypowerlaws,
+title={How Do Large Language Monkeys Get Their Power (Laws)?},
+author={Rylan Schaeffer and Joshua Kazdan and John Hughes and Jordan Juravsky and Sara Price and Aengus Lynch and Erik Jones and Robert Kirk and Azalia Mirhoseini and Sanmi Koyejo},
+booktitle={Forty-second International Conference on Machine Learning},
+year={2025},
+url={https://openreview.net/forum?id=QqVZ28qems}
+}
