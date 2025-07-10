@@ -3150,6 +3150,7 @@ def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
     # n i.i.d. Beta(alpha, beta) random variables. But this doesn't appear to exist
     # in close form or even numerically?
     # TODO(rylan): Investigate this further.
+    print(f'the scale is {largest_fraction_successes}')
     scale = (num_data + 1.0) * largest_fraction_successes / num_data
     # Make sure that scale isn't more than 1.0 + epsilon.
     scale = min(scale, 1.0)
@@ -3208,7 +3209,7 @@ def fit_beta_binomial_three_parameters_to_num_samples_and_num_successes(
         }
     )
     return result
-
+    
 
 def fit_beta_binomial_two_parameters_to_num_samples_and_num_successes(
     num_samples_and_num_successes_df: pd.DataFrame,
