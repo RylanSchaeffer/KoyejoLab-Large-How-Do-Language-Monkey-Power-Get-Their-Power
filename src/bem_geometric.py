@@ -148,8 +148,9 @@ def compute_estimates_better_mixture_geometric(data, params, k, n_distr):
             estimate = EM.compute_expected_pass_at_k(params, n_distr, row['Num. Samples Total'], k-row['Num. Samples Total'])
             total += estimate/denom
         elif (row['Num. Samples Correct'] != 0) and (row['Num. Samples Total'] < k):
-            total+= 1
-        elif (row['Num. Samples Total'] !=0) and (row['Num. Samples Total'] >=k):
+            total+= 1 #very uncertain that this is the correct way to estimate!!!
+        elif (row['Num. Samples Total'] >=k):
+            #directly use the point estimate
             total += estimate_pass_at_k(
                 num_samples_total = np.array([row['Num. Samples Total']]),
                 num_samples_correct=np.array([row['Num. Samples Correct']]),
